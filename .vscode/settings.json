@@ -18,5 +18,6 @@
     "--query-driver=**",
     "--compile-commands-dir=/Users/novelalam/EIT_Firmware/build"
   ],
-  "idf.flashType": "UART"
+  "idf.flashType": "UART",
+  "idf.currentSetup": "/Users/novelalam/esp/v5.2.1/esp-idf"
 }

@@ -18,17 +18,15 @@ int AD7450_init() {
         .command_bits = 0,
         .address_bits = 0,
         .dummy_bits = 0,
-        .mode = 3, // CPOL=1, CPHA=1 (SCLK idle high, sample on rising edge)
-        .clock_speed_hz = 100, // 8 MHz
+        .mode = 2, // CPOL=1, CPHA=0 (SCLK idle high, sample on rising edge)
+        .clock_speed_hz = SPI_MASTER_FREQ_8M, // 8 MHz
         .spics_io_num = PIN_CS_ADC,
         .queue_size = AD7450_QUEUE_SIZE,
     };
 
     esp_err_t ret = spi_bus_add_device(SPI2_HOST, &devcfg, &ad7450_handle);
     if (ret != ESP_OK) {
-        #if DEBUG
         ESP_LOGE(TAG, "Failed to add device to SPI bus: %s", esp_err_to_name(ret));
-        #endif
         return ret;
     }
 
@@ -36,13 +34,11 @@ int AD7450_init() {
     spi_transaction_t t;
     memset(&t, 0, sizeof(t));
     t.length = 16;
-    t.flags = SPI_TRANS_USE_RXDATA | SPI_TRANS_USE_TXDATA; // Use TX data to ensure MOSI is driven (though ignored by ADC)
+    t.flags = SPI_TRANS_USE_RXDATA; // Use TX data to ensure MOSI is driven (though ignored by ADC)
     
     ret = spi_device_transmit(ad7450_handle, &t);
     if (ret != ESP_OK) {
-        #if DEBUG
         ESP_LOGE(TAG, "Dummy read failed: %s", esp_err_to_name(ret));
-        #endif
         return ret;
     }
 
@@ -50,122 +46,25 @@ int AD7450_init() {
     return ESP_OK;
 }
 
-int AD7450_Read(int16_t *buf, uint32_t len) {
-    if (ad7450_handle == NULL) {
-        #if DEBUG
-        ESP_LOGE(TAG, "AD7450 not initialized");
-        #endif
-        return -1;
-    }
+int AD7450_Read(int16_t *buf, uint32_t len)
+{
+    if (!ad7450_handle) return -1;
 
-    if (len > AD7450_QUEUE_SIZE) {
-        #if DEBUG
-        ESP_LOGE(TAG, "Read length %lu exceeds queue size %d", len, AD7450_QUEUE_SIZE);
-        #endif
-        return -1;
-    }
+    spi_transaction_t t;
+    uint8_t rx[2];
 
-    /* Clear the buffer */
-    //memset(buf, 0, (size_t)len * sizeof(uint16_t));
+    memset(&t, 0, sizeof(t));
+    t.length = 16;
+    t.rx_buffer = rx;
 
-    /* Acquire the bus*/
-    if (spi_device_acquire_bus(ad7450_handle, portMAX_DELAY) != ESP_OK) {
-        #if DEBUG
-        ESP_LOGE(TAG, "Failed to acquire SPI bus");
-        #endif
-        return -1;
-    }
-
-    /* Hold all the transation reference in flight */
-    static spi_transaction_t trans_in_flight[AD7450_QUEUE_SIZE];
-
-    //#define QUEUE
-    #ifdef QUEUE
-    /* Queue "len" reads */
-    for (uint32_t curr_queue_trans = 0; curr_queue_trans < len; curr_queue_trans++) {
-        trans_in_flight[curr_queue_trans].length = 16;
-        trans_in_flight[curr_queue_trans].rx_buffer = &buf[curr_queue_trans];
-        trans_in_flight[curr_queue_trans].tx_buffer = NULL;
-        
-        if (spi_device_queue_trans(ad7450_handle, &trans_in_flight[curr_queue_trans], portMAX_DELAY) != ESP_OK) {
-            spi_device_release_bus(ad7450_handle);
+    for (uint32_t i = 0; i < len; i++) {
+        if (spi_device_polling_transmit(ad7450_handle, &t) != ESP_OK) {
             return -1;
         }
-        
-        
-        #if DEBUG
-        ESP_LOGE(TAG, "send packet %lu", curr_queue_trans);
-        #endif
+
+        buf[i] = (uint16_t)((rx[0] << 8) | rx[1]);
 
     }
-
-    /* Collect results */
-    for (uint32_t curr_queue_trans = 0; curr_queue_trans < len; curr_queue_trans++) {
-        spi_transaction_t* trans_result;
-        
-        if (spi_device_get_trans_result(ad7450_handle, &trans_result, portMAX_DELAY) != ESP_OK) {
-            #if DEBUG
-            ESP_LOGE(TAG, "Failed to get SPI transaction result");
-            #endif
-            spi_device_release_bus(ad7450_handle);
-            return -1;
-        }
-    }
-    #else
-
-    spi_transaction_t t = {
-        .length = 16,
-        .flags = 0,
-        .tx_data = {0},
-        .rx_buffer = buf
-    };
-
-
-    
-
-
-    if (spi_device_polling_transmit(ad7450_handle, &t) != ESP_OK) {
-        spi_device_release_bus(ad7450_handle);
-        return -1;
-    }
-
-    
-    // for (uint32_t i = 0; i < len; i++) {
-        
-    //     int64_t start_time = esp_timer_get_time();
-    //     if (spi_device_polling_transmit(ad7450_handle, &t) != ESP_OK) {
-    //         spi_device_release_bus(ad7450_handle);
-    //         return -1;
-    //     }
-    //     buf[i] = *(int16_t*)t.rx_data;
-    //     int64_t end_time = esp_timer_get_time();
-    //     printf("ADC Read Time: %lld us\n", (end_time - start_time));
-    //     vTaskDelay(1);
-    // }
-
-    #endif
-
-    /* See if transaction finsihed and went well*/
-
-    // for (uint32_t curr_queue_trans = 0; curr_queue_trans < len; curr_queue_trans++) {
-
-    //     /* throw away var to hold pointer to pointer to transmit*/
-    //     spi_transaction_t* trans_result;
-
-    //     if (spi_device_get_trans_result(ad7450_handle, &trans_result, portMAX_DELAY) != ESP_OK) {
-    #if DEBUG
-    ESP_LOGE(TAG, "Failed to get SPI transaction result");
-    #endif
-    //         spi_device_release_bus(ad7450_handle);
-    //         return -1;
-    //     }
-
-    //     vTaskDelay(300);
-
-    // }
-
-
-    spi_device_release_bus(ad7450_handle);
 
     return 0;
 }

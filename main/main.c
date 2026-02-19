@@ -13,15 +13,15 @@
 #include "../Middle_Ware/hardware.h"
 #include "../Middle_Ware/hardware-test.h"
 
-#define SIG_GEN_FREQ (47210.0f) 
+#define SIG_GEN_FREQ (50000.0f) 
 
 static const char *TAG = "MAIN";
 
 /* Task Details for Calibration Task*/
-TaskHandle_t cal_task;
-static const char* cal_task_name = "CalibrationTask";
-static const configSTACK_DEPTH_TYPE cal_task_stack_depth = 4000;
-static const UBaseType_t cal_task_priority = 5;
+// TaskHandle_t cal_task;
+// static const char* cal_task_name = "CalibrationTask";
+// static const configSTACK_DEPTH_TYPE cal_task_stack_depth = 4000;
+// static const UBaseType_t cal_task_priority = 5;
 
 /* Task Details for Measurement Task */
 TaskHandle_t meas_task;
@@ -82,10 +82,10 @@ void app_main(void)
 
 
 
-    // if (signal_gen_start(SIG_GEN_FREQ) != ESP_OK) {
-    //     ESP_LOGE(TAG, "Failed to initialize Signal Generator");
-    //     return;
-    // }
+    if (signal_gen_start(SIG_GEN_FREQ) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize Signal Generator");
+        return;
+    }
 
 
         
@@ -95,12 +95,12 @@ void app_main(void)
   
 
     // /* Create a Task to find all the calibration values */
-    void* cal_arg = NULL;
-    if ( xTaskCreate( &calibration_task, cal_task_name, cal_task_stack_depth, cal_arg, cal_task_priority, &cal_task ) != pdPASS ) {
-    #if DEBUG
-        ESP_LOGE(TAG, "Failed to create thread");
-    #endif
-    } 
+    // void* cal_arg = NULL;
+    // if ( xTaskCreate( &calibration_task, cal_task_name, cal_task_stack_depth, cal_arg, cal_task_priority, &cal_task ) != pdPASS ) {
+    // #if DEBUG
+    //     ESP_LOGE(TAG, "Failed to create thread");
+    // #endif
+    // } 
  
  
 

@@ -56,7 +56,7 @@ int set_src_sense_ADG73(uint8_t src_pos, uint8_t src_neg, uint8_t sense_pos, uin
     *(uint32_t*)message.tx_data = payload;
     
     /* Log the packet */
-    ESP_LOG_BUFFER_HEX(TAG, message.tx_data, 4);
+    // ESP_LOG_BUFFER_HEX(TAG, message.tx_data, 4);
     /* Use polling transmit for faster execution of small transactions */
     if ( spi_device_polling_transmit(ADG73_handle, &message) != ESP_OK ) {
         return -1;

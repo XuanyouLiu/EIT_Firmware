@@ -80,6 +80,18 @@ int adcRead(int16_t *buf, size_t len, uint16_t gain);
  */
 uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end);
 
+/**
+ * @brief Calculate the accumulated amplitude of frequency components from the buffer within a range of bins.
+ * 
+ * @param buf Buffer containing the data.
+ * @param len Length of the buffer.
+ * @param begin Start bin index (inclusive).
+ * @param end End bin index (inclusive).
+ * @return The accumulated amplitude.
+ */
+uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end);
+
+
 
 
 /**
@@ -127,4 +139,9 @@ int adc_init(void);
 bool detect_opamp_clipping(int16_t *buf, size_t len, uint32_t threshold, uint8_t begin, uint8_t end);
 
 
+
+/**
+ * @brief this function takes in a buffer of size Nfloat and returns a mag of that std dev range of value
+ */
+uint16_t test_std_dev_mag(int16_t* buf, uint16_t buf_len, float std_multiplier);
 

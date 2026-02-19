@@ -200,6 +200,37 @@ uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end) {
 }
 
 
+uint16_t test_std_dev_mag(int16_t* buf, uint16_t buf_len, float std_multiplier) {
+    if (buf_len == 0) return 0;
+
+    // Use signed 32-bit to prevent overflow/underflow from int16_t inputs
+    int32_t rolling_sum = 0;
+    for (uint16_t i = 0; i < buf_len; i++) {
+        rolling_sum += buf[i];
+    }
+
+    float mean = (float)rolling_sum / (float)buf_len;
+    float variance_sum = 0;
+
+    for (uint16_t i = 0; i < buf_len; i++) {
+        float diff = (float)buf[i] - mean;
+        variance_sum += diff * diff;
+    }
+
+    float variance = variance_sum / (float)buf_len;
+    float sigma = sqrtf(variance);
+
+    // // This is the simplified version of your range logic
+    // float std_range = std_multiplier * sigma * mean;
+
+    // // printf("mean:%f sigma:%f\n", mean, sigma);
+
+    // Safety check: Ensure we don't overflow uint16_t (max 65535)
+    // if (std_range > 65535.0f) return 65535;
+    
+    return (uint16_t)sigma;
+}
+
 
 
 int init_inamp_pots() {
@@ -225,8 +256,8 @@ int init_inamp_pots() {
 
 int set_mux(uint8_t src_pos, uint8_t src_neg, uint8_t sense_pos, uint8_t sense_neg) {
 
-    ESP_LOGI(TAG, "set_mux called with src_pos=%u, src_neg=%u, sense_pos=%u, sense_neg=%u",
-            src_pos, src_neg, sense_pos, sense_neg);
+    // ESP_LOGI(TAG, "set_mux called with src_pos=%u, src_neg=%u, sense_pos=%u, sense_neg=%u",
+            // src_pos, src_neg, sense_pos, sense_neg);
 
            esp_err_t ret = set_src_sense_ADG73(src_pos, src_neg, sense_pos, sense_neg);
 

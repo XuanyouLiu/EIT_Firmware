@@ -220,9 +220,9 @@ void calibration_task(void* args) {
             vTaskDelay(1);
             
             /* Read tare value */
-            int16_t tare_buffer[BUFFER_LEN];
+            uint16_t tare_buffer[BUFFER_LEN];
             size_t buffer_len = sizeof(tare_buffer) / sizeof(tare_buffer[0]);
-            if (adcRead(tare_buffer, buffer_len, max_calibrated_sense_rdata) != ESP_OK) {
+            if (adcRead((int16_t) tare_buffer, buffer_len, max_calibrated_sense_rdata) != ESP_OK) {
                 #if DEBUG
                 ESP_LOGE(TAG, "Failed to read tare for pair [%u][%u]", src_elec_pair, sense_elec_pair);
                 #endif
@@ -230,8 +230,10 @@ void calibration_task(void* args) {
             }
             
             /* Store tare value in calibration table reference_amp */
-            curr_config->reference_amp = dsp_freq_amp(tare_buffer, buffer_len, CALIBRATION_DSP_BUCKET, CALIBRATION_DSP_BUCKET);
-            ESP_LOGI(TAG, "Tare[%u][%u] complete", src_elec_pair, sense_elec_pair);
+            // curr_config->reference_amp = test_std_dev_mag(tare_buffer, buffer_len, 0);
+
+            // dsp_freq_amp(tare_buffer, buffer_len, CALIBRATION_DSP_BUCKET, CALIBRATION_DSP_BUCKET);
+            ESP_LOGI(TAG, "Tare[%u][%u]: Ref Amp:%u", src_elec_pair, sense_elec_pair, curr_config->reference_amp);
         }
     }
 

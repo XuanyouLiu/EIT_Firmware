@@ -5,6 +5,8 @@
 #include "test_data_gen.h"
 #include "freertos/FreeRTOS.h"
 
+#include <math.h>
+
 #define TARGET_BUCKET 7
 
 static const char *TAG = "HARDWARE_TEST";
@@ -21,16 +23,14 @@ int test_adc(void) {
     
     while(1) {
         if ( AD7450_Read(buf, 64) != 0) {
-            #if DEBUG
-            ESP_LOGE(TAG, "test_adc failed");
-            #endif
+            ESP_LOGE(TAG, "test_adc failed");   
             return -1;
         }
 
-        for (int i = 0; i < 1; i++) {
-            ESP_LOGI(TAG, "buf[%d]=%d", i, buf[i]);
+        for (int i = 0; i < 64; i++) {
+            ESP_LOGI(TAG, "buf[%d]=%hu", i, buf[i]);
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
     return 0;
 }
@@ -49,8 +49,8 @@ int test_signal_gen(void) {
 }
 
 int test_inamp_pots(void) {
-    uint16_t in_amp_scr = 400;
-    uint16_t in_amp_sense = 200;
+    // uint16_t in_amp_scr = 0;
+    // uint16_t in_amp_sense = 200;
 
     // Dummy test for inamp pots
     if (init_inamp_pots() != 0) {
@@ -126,11 +126,72 @@ int test_dsp(bool clipped, float clip_percent) {
 }
 
 void test_function(void) {
-    // test_adc();
-    test_signal_gen();
+    // test_signal_gen();
     // test_inamp_pots();
     // test_mux();
-      
 
-    // test_dsp(false, 0.0f);
+    set_src_inamp_gain(511);
+    set_sense_inamp_gain(40);
+
+    set_mux(1, 2, 4, 5);
+    
+    // test_adc();
+
+    while (1) {
+        uint16_t mag = test_peak_to_peak();
+        printf("mag: %d\n", mag);
+        vTaskDelay(pdMS_TO_TICKS(100));
+
+    }
+
+}
+
+uint16_t test_peak_to_peak() {
+    int16_t buf[64];
+
+    if ( AD7450_Read(buf, 64) != 0) {
+            ESP_LOGE(TAG, "test_adc failed");   
+            return -1;
+    }
+
+
+    // for (int i = 0; i < 64; i++) {
+    //     ESP_LOGI(TAG, "buf[%d] = %d", i, buf[i]);
+    // }
+    return test_std_dev_mag(buf, 64, 2);
+
+
+}
+
+
+
+uint16_t test_std_dev_mag_test(int16_t* buf, uint16_t buf_len, float std_multiplier) {
+    if (buf_len == 0) return 0;
+
+    // Use signed 32-bit to prevent overflow/underflow from int16_t inputs
+    int32_t rolling_sum = 0;
+    for (uint16_t i = 0; i < buf_len; i++) {
+        rolling_sum += buf[i];
+    }
+
+    float mean = (float)rolling_sum / (float)buf_len;
+    float variance_sum = 0;
+
+    for (uint16_t i = 0; i < buf_len; i++) {
+        float diff = (float)buf[i] - mean;
+        variance_sum += diff * diff;
+    }
+
+    float variance = variance_sum / (float)buf_len;
+    float sigma = sqrtf(variance);
+
+    // // This is the simplified version of your range logic
+    // float std_range = std_multiplier * sigma * mean;
+
+    // // printf("mean:%f sigma:%f\n", mean, sigma);
+
+    // Safety check: Ensure we don't overflow uint16_t (max 65535)
+    // if (std_range > 65535.0f) return 65535;
+    
+    return (uint16_t)sigma;
 }
