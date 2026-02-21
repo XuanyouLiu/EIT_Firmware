@@ -2,6 +2,7 @@
 """
 EITVis_v7: Real-time EIT acquisition & reconstruction
 (Press 0 → capture baseline V0, Press 1 → stream & reconstruct V1)
+(Press + / - → manually adjust the color scale limits)
 Uses standard protocol: 8 electrodes × 5 measurements = 40 channels.
 """
 
@@ -17,7 +18,7 @@ from pyeit.eit.jac import JAC
 from pyeit.eit.interp2d import sim2pts
 
 # ---------------- Serial configuration ---------------- #
-PORT = "/dev/cu.usbmodem1101"   # modify if your port changes
+PORT = "/dev/cu.usbmodem2101"   # modify if your port changes
 BAUD = 115200
 TIMEOUT = 1
 
@@ -26,27 +27,26 @@ NUM_CHANNELS = 40  # 8 excitations × 5 measurements
 CAPTURE_FRAMES = 40
 UPDATE_MS = 50
 EIT_ALPHA = 0.9
-CLIM_MIN, CLIM_MAX = 0.1, 4.0  # Tighter color limits for more contrast
-CLIM_PERCENTILE = 90  # Use 90th percentile instead of 98th for more sensitive scaling
+
+# Manual scaling parameters
+INITIAL_CLIM = 1.0
+CLIM_STEP = 0.2  # How much the scale changes per key press
 
 # ---------------- Debug / logging ---------------- #
-# Print raw serial lines as they are received (can be very verbose).
 PRINT_RX_RAW = False
-# Also print a short summary of the parsed numeric frame.
 PRINT_RX_PARSED_SUMMARY = True
-# Print every N valid frames (set to 1 to print every frame).
 PRINT_RX_EVERY_N = 1
 
 # ---------------- Filtering configuration ---------------- #
-OUTLIER_THRESHOLD = 3.0  # MAD threshold for outlier removal (higher = less aggressive)
+OUTLIER_THRESHOLD = 3.0  # MAD threshold for outlier removal
 
 # ---------------- EIT configuration ---------------- #
 N_ELEC = 8
 H0 = 0.05
 DIST_EXC = 1
 STEP_MEAS = 1
-PARSER_MEAS = 'std'  # Standard protocol: 8 × 5 = 40 measurements
-JAC_P, JAC_LAMB = 0.5, 0.3  # Increased lamb for stronger regularization (reduces artifacts)
+PARSER_MEAS = 'std'  
+JAC_P, JAC_LAMB = 0.5, 0.3  
 
 
 # ------------------------------------------------------------
@@ -58,6 +58,7 @@ def open_serial():
         time.sleep(2)
         ser.reset_input_buffer()
         print("Serial ready.\nPress 0 to capture V0, press 1 to stream V1.")
+        print("Press + or - to adjust the color scale limits.")
         return ser
     except serial.SerialException as e:
         print("Serial open error:", e)
@@ -86,7 +87,7 @@ def filter_outliers(data, v0_ref, threshold=3.0):
     mad = np.median(np.abs(diff - median_diff))
     if mad < 1e-10:
         return data
-    z_score = (diff - median_diff) / (1.4826 * mad)  # MAD to std conversion
+    z_score = (diff - median_diff) / (1.4826 * mad) 
     filtered = data.copy()
     outliers = z_score > threshold
     if np.any(outliers):
@@ -112,14 +113,10 @@ def main():
         step_meas=STEP_MEAS,
         parser_meas=PARSER_MEAS,
     )
-    print(f"Protocol created: {protocol.n_exc} excitations × {protocol.n_meas} measurements")
 
     eit = JAC(mesh_obj, protocol)
     eit.setup(p=JAC_P, lamb=JAC_LAMB, method="kotre",
               perm=1.0, jac_normalized=True)
-
-    print(f"Jacobian shape: {eit.J.shape}")
-    print("Using standard protocol with 40 measurements (8 excitations × 5 measurements).")
 
     ser = open_serial()
 
@@ -130,23 +127,21 @@ def main():
                        facecolors=np.zeros(len(tri)),
                        shading="flat", cmap="coolwarm")
     cb = fig.colorbar(pcm, ax=ax, shrink=0.85, pad=0.02)
-    cb.set_label("Δσ (a.u.)")  # Positive Δσ (Red) = More conductive | Negative Δσ (Blue) = Less conductive
+    cb.set_label("Δσ (a.u.)") 
 
     # --- Draw electrode markers and labels ---
     n_electrodes = N_ELEC
     angles = np.linspace(0, 2 * np.pi, n_electrodes, endpoint=False)
-    electrode_radius = 1.0  # Match the mesh boundary radius
+    electrode_radius = 1.0  
 
     for i, angle in enumerate(angles):
         x = electrode_radius * np.cos(angle)
         y = electrode_radius * np.sin(angle)
 
-        # Draw electrode marker (circle)
         ax.plot(x, y, 'o', color='black', markersize=12, markeredgecolor='white',
                 markeredgewidth=2, zorder=10)
 
-        # Add electrode number label
-        label_offset = 1.15  # Position label slightly outside the circle
+        label_offset = 1.15 
         x_label = label_offset * electrode_radius * np.cos(angle)
         y_label = label_offset * electrode_radius * np.sin(angle)
         ax.text(x_label, y_label, str(i), fontsize=11, fontweight='bold',
@@ -167,6 +162,7 @@ def main():
         "last_ds": None,
         "frame_idx": 0,
         "rx_valid_count": 0,
+        "current_clim": INITIAL_CLIM, # Tracking the static color scale limit
     }
 
     def set_status(msg):
@@ -186,10 +182,20 @@ def main():
                 print("Press 0 first to capture V0 baseline.")
                 return
             state["mode"] = "measure_v1"
-            state["frame_idx"] = 0  # Reset frame counter
-            state["last_ds"] = None  # Reset temporal filter
+            state["frame_idx"] = 0 
+            state["last_ds"] = None 
             set_status("Streaming and reconstructing V1 ...")
             print("---- Start streaming V1 ----")
+            
+        # Add handling for + / = (increase range) and - (decrease range)
+        elif key in ["+", "="]:
+            state["current_clim"] += CLIM_STEP
+            print(f"Color limit increased to +/- {state['current_clim']:.2f}")
+            
+        elif key == "-":
+            # Prevent scale from going to 0 or negative
+            state["current_clim"] = max(0.1, state["current_clim"] - CLIM_STEP)
+            print(f"Color limit decreased to +/- {state['current_clim']:.2f}")
 
     fig.canvas.mpl_connect("key_press_event", on_key)
 
@@ -200,15 +206,13 @@ def main():
             set_status(f"{state['mode']} | waiting for valid data ...")
             return (pcm,)
 
-        trimmed = frame[:NUM_CHANNELS]  # 40 channels (8 × 5 measurements)
+        trimmed = frame[:NUM_CHANNELS] 
         state["rx_valid_count"] += 1
 
-        # ---- Debug print received data ----
         if PRINT_RX_EVERY_N > 0 and (state["rx_valid_count"] % PRINT_RX_EVERY_N == 0):
             if PRINT_RX_RAW and raw is not None:
                 print(f"[RX {state['rx_valid_count']:06d}] {raw}")
             if PRINT_RX_PARSED_SUMMARY:
-                # Keep this lightweight to avoid slowing the animation loop too much.
                 print(
                     f"[RX {state['rx_valid_count']:06d}] "
                     f"len={len(trimmed)} mean={float(np.mean(trimmed)):.6f} "
@@ -221,27 +225,20 @@ def main():
             progress = len(state["capture"])
             set_status(f"Capturing V0 {progress}/{CAPTURE_FRAMES}")
             if progress >= CAPTURE_FRAMES:
-                # Use median instead of mean for more robust baseline
                 state["v0"] = np.median(state["capture"], axis=0)
                 np.save("V0.npy", state["v0"])
                 print(f"Baseline V0 captured, len={len(state['v0'])}")
-                print(state["v0"])
                 state["capture"].clear()
                 state["mode"] = "idle"
-                state["last_ds"] = None  # Reset filtered reconstruction
+                state["last_ds"] = None 
                 set_status("V0 ready. Press 1 to stream V1.")
             return (pcm,)
 
         elif state["mode"] == "measure_v1":
             state["frame_idx"] += 1
-            if state["frame_idx"] == 1:
-                print(f"First V1 frame len={len(trimmed)}")
 
             try:
-                # Filter outliers in raw measurements
                 v1_filtered = filter_outliers(trimmed, state["v0"], threshold=OUTLIER_THRESHOLD)
-
-                # Solve with normalization enabled to reduce artifacts
                 ds = eit.solve(v1_filtered, state["v0"], normalize=True)
                 filt = ds if state["last_ds"] is None else (
                     (1 - EIT_ALPHA) * state["last_ds"] + EIT_ALPHA * ds)
@@ -251,12 +248,12 @@ def main():
                 face_vals = face_values(mesh_obj, mapped)
                 pcm.set_array(face_vals)
 
-                # Dynamic color scaling based on actual data range
-                clim_raw = np.percentile(np.abs(face_vals), CLIM_PERCENTILE)
-                clim = float(np.clip(clim_raw, CLIM_MIN, CLIM_MAX))
+                # Use the static, manually controlled clim variable
+                clim = state["current_clim"]
                 pcm.set_clim(-clim, clim)
                 cb.update_normal(pcm)
-                set_status(f"Frame {state['frame_idx']}: Δσ range ±{clim:.2f}")
+                
+                set_status(f"Frame {state['frame_idx']}: Fixed range ±{clim:.2f}")
             except Exception as e:
                 print("EIT reconstruction error:", e)
                 set_status(f"Error: {e}")

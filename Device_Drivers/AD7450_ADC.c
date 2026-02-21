@@ -46,7 +46,7 @@ int AD7450_init() {
     return ESP_OK;
 }
 
-int AD7450_Read(int16_t *buf, uint32_t len)
+int AD7450_Read(uint16_t *buf, uint32_t len)
 {
     if (!ad7450_handle) return -1;
 

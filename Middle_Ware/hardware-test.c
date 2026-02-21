@@ -12,7 +12,7 @@
 static const char *TAG = "HARDWARE_TEST";
 
 int test_adc(void) {
-    int16_t buf[64];
+    uint16_t buf[64];
     
     if ( AD7450_init() != 0) {
         // #if DEBUG
@@ -28,7 +28,7 @@ int test_adc(void) {
         }
 
         for (int i = 0; i < 64; i++) {
-            ESP_LOGI(TAG, "buf[%d]=%hu", i, buf[i]);
+            ESP_LOGI(TAG, "buf[%d]=%u", i, buf[i]);
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -131,9 +131,9 @@ void test_function(void) {
     // test_mux();
 
     set_src_inamp_gain(511);
-    set_sense_inamp_gain(40);
+    set_sense_inamp_gain(300);
 
-    set_mux(1, 2, 4, 5);
+    set_mux(1, 2, 3, 4);
     
     // test_adc();
 
@@ -147,18 +147,18 @@ void test_function(void) {
 }
 
 uint16_t test_peak_to_peak() {
-    int16_t buf[64];
+    uint16_t buf[64];
 
-    if ( AD7450_Read(buf, 64) != 0) {
-            ESP_LOGE(TAG, "test_adc failed");   
-            return -1;
+    if (adcRead(buf, 64) != 0) {
+        ESP_LOGE(TAG, "test_adc failed");   
+        return -1;
     }
 
 
     // for (int i = 0; i < 64; i++) {
     //     ESP_LOGI(TAG, "buf[%d] = %d", i, buf[i]);
     // }
-    return test_std_dev_mag(buf, 64, 2);
+    return test_std_dev_mag((int16_t *)buf, 64, 2);
 
 
 }

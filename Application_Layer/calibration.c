@@ -9,8 +9,8 @@
 
 static const char *TAG = "CALIBRATION";
 
-const uint16_t SCR_RDATA_CONST = 200; //Fixed source gain value
-uint16_t max_calibrated_sense_rdata = 512; //holds the max gain intially than best gain  
+const uint16_t SCR_RDATA_CONST = 100; //Fixed source gain value
+uint16_t max_calibrated_sense_rdata = 100; //holds the max gain intially than best gain  
 
 
 //have better logic to detect clippimng besides just seeing amplitude went down 
@@ -69,7 +69,7 @@ static int calibrate_gain_pair(Calibration_t *cal)
     
 
     /* Used for ADC and DSP */
-    int16_t buffer[BUFFER_LEN];
+    uint16_t buffer[BUFFER_LEN];
     size_t buffer_len = sizeof(buffer) / sizeof(buffer[0]);
 
     
@@ -91,13 +91,13 @@ static int calibrate_gain_pair(Calibration_t *cal)
             vTaskDelay(1); //so watch dog task not starved
 
             /* ADC read into a buffer */
-            if (adcRead((int16_t*)buffer, buffer_len, inAmp_sense_gain) != ESP_OK) {
+            if (adcRead(buffer, buffer_len) != ESP_OK) {
                 
                 continue;
             }
 
             /* If clipping detected break out of the loop and set max_calibrated_sense_rdata to inAmp_sense_gain*/
-            bool clip_detected = detect_opamp_clipping(buffer, buffer_len, CLIP_THRESHOLD, CLIP_MIN_SAMPLES, CLIP_MAX_INDEX);
+            bool clip_detected = detect_opamp_clipping((int16_t *)buffer, buffer_len, CLIP_THRESHOLD, CLIP_MIN_SAMPLES, CLIP_MAX_INDEX);
             
             // Check if clipping was detected in the current buffer
             if (clip_detected) {
@@ -222,7 +222,7 @@ void calibration_task(void* args) {
             /* Read tare value */
             uint16_t tare_buffer[BUFFER_LEN];
             size_t buffer_len = sizeof(tare_buffer) / sizeof(tare_buffer[0]);
-            if (adcRead((int16_t) tare_buffer, buffer_len, max_calibrated_sense_rdata) != ESP_OK) {
+            if (adcRead(tare_buffer, buffer_len) != ESP_OK) {
                 #if DEBUG
                 ESP_LOGE(TAG, "Failed to read tare for pair [%u][%u]", src_elec_pair, sense_elec_pair);
                 #endif

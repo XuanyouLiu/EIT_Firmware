@@ -10,6 +10,7 @@
 #define SENSE_INAMP_HANDLE 1
 
 #define ESP32C3
+// #define USE_ESP_ADC
 
 #ifdef ESP32C3
 // SPI bus pins (XIAO ESP32-C3)
@@ -26,6 +27,10 @@
 
 #define PIN_CTRL          GPIO_NUM_4    
 #define PIN_MSB           GPIO_NUM_3  
+#endif
+
+#ifdef USE_ESP_ADC
+#define PIN_ESP_ADC_INPUT GPIO_NUM_4
 #endif
 
 
@@ -67,7 +72,7 @@ int set_sense_inamp_gain(uint16_t sense_gain);
  * @param len Length of the buffer.
  * @return 0 on success, or an error code.
  */
-int adcRead(int16_t *buf, size_t len, uint16_t gain);
+int adcRead(uint16_t *buf, size_t len);
 
 /**
  * @brief Calculate the accumulated amplitude of frequency components from the buffer within a range of bins.
@@ -79,20 +84,6 @@ int adcRead(int16_t *buf, size_t len, uint16_t gain);
  * @return The accumulated amplitude.
  */
 uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end);
-
-/**
- * @brief Calculate the accumulated amplitude of frequency components from the buffer within a range of bins.
- * 
- * @param buf Buffer containing the data.
- * @param len Length of the buffer.
- * @param begin Start bin index (inclusive).
- * @param end End bin index (inclusive).
- * @return The accumulated amplitude.
- */
-uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end);
-
-
-
 
 /**
  * @brief Set the multiplexer channels for source and sense.

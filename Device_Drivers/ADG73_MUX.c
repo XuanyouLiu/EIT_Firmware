@@ -11,9 +11,6 @@
  */
 
 #include "ADG73_MUX.h"
-#include "esp_log.h"
-
-static const char *TAG = "ADG73";
 
 /* Device Handle*/
 static spi_device_handle_t ADG73_handle = NULL;

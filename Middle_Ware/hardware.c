@@ -4,11 +4,11 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "driver/spi_master.h"
+#include "esp_adc/adc_oneshot.h"
 #include "../Device_Drivers/AD5270_DigiPot.h"
 #include "../Device_Drivers/AD5930_SigGen.h"
 #include "../Device_Drivers/ADG73_MUX.h"
 #include "../Device_Drivers/AD7450_ADC.h"
-#include "../Middle_Ware/test_data_gen.h"
 #include "esp_dsp.h"
 #include <math.h>
 
@@ -17,6 +17,38 @@
 #define ESP_OK 0
 
 static const char *TAG = "HARDWARE";
+
+#ifdef USE_ESP_ADC
+static adc_oneshot_unit_handle_t s_adc1_handle = NULL;
+static bool s_adc1_initialized = false;
+
+static int init_esp_adc_oneshot(void) {
+    if (s_adc1_initialized) {
+        return ESP_OK;
+    }
+
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT_1,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
+    };
+    if (adc_oneshot_new_unit(&init_config, &s_adc1_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to init ADC oneshot unit");
+        return -1;
+    }
+
+    adc_oneshot_chan_cfg_t channel_config = {
+        .atten = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    if (adc_oneshot_config_channel(s_adc1_handle, ADC_CHANNEL_4, &channel_config) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to config ADC channel for GPIO4");
+        return -1;
+    }
+
+    s_adc1_initialized = true;
+    return ESP_OK;
+}
+#endif
 
 
 
@@ -75,23 +107,27 @@ int set_sense_inamp_gain(uint16_t sense_gain) {
     return ESP_OK;
 }
 
-int adcRead(int16_t *buf, size_t len, uint16_t gain) {
+int adcRead(uint16_t *buf, size_t len) {
     #if DEBUG
     ESP_LOGI(TAG, "adcRead called with buffer length=%zu", len);
     #endif
-    
-    #ifdef ADC_MOCK
-    if (gain >= 250) {
-        bool clipped = (rand() % 100) < 2;
-        generate_sine_int16_multi_random_amp_clipped(buf, 50000.0f, 0, 0, clipped, 0.98f);
 
-    } else {
-        generate_sine_int16_multi_random_amp_clipped(buf, 50000.0f, 0, 0, false, 1.0f);
+    #ifdef USE_ESP_ADC
+        if (init_esp_adc_oneshot() != ESP_OK) {
+            return -1;
+        }
 
-    }
+        for (size_t i = 0; i < len; i++) {
+            int adc_raw = 0;
+            if (adc_oneshot_read(s_adc1_handle, ADC_CHANNEL_4, &adc_raw) != ESP_OK) {
+                ESP_LOGE(TAG, "ESP ADC read failed");
+                return -1;
+            }
+            buf[i] = (uint16_t)adc_raw;
+        }
     #else
-        if ( AD7450_Read(buf, len) != 0) {
-            ESP_LOGI(TAG, "test_adc failed");
+        if (AD7450_Read(buf, len) != 0) {
+            ESP_LOGI(TAG, "AD7450 read failed");
             return -1;
         }
     #endif
@@ -153,7 +189,6 @@ uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end) {
 
     uint32_t accumulated_mag = 0;
     uint32_t max_mag = 0;
-    uint32_t mag6 = 0, mag7 = 0, mag8 = 0;
     uint32_t high_freq_sum = 0;
 
     for (size_t k = 0; k < len / 2; k++) {
@@ -169,10 +204,6 @@ uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end) {
         if (mag > max_mag) {
             max_mag = mag;
         }
-
-        if (k == 6) mag6 = mag;
-        if (k == 7) mag7 = mag;
-        if (k == 8) mag8 = mag;
 
         if (k >= 12) {
             high_freq_sum += mag;
@@ -200,38 +231,35 @@ uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end) {
 }
 
 
-uint16_t test_std_dev_mag(int16_t* buf, uint16_t buf_len, float std_multiplier) {
+
+
+
+uint16_t test_std_dev_mag(int16_t* buf, uint16_t buf_len, float multiplier) {
     if (buf_len == 0) return 0;
 
-    // Use signed 32-bit to prevent overflow/underflow from int16_t inputs
-    int32_t rolling_sum = 0;
+    // 1. Calculate Mean using 32-bit integer for speed
+    int32_t total_sum = 0;
     for (uint16_t i = 0; i < buf_len; i++) {
-        rolling_sum += buf[i];
+        total_sum += buf[i];
+        }
+        float mean = (float)total_sum / (float)buf_len;
+
+        // 2. Calculate Variance
+        float variance_sum = 0;
+        for (uint16_t i = 0; i < buf_len; i++) {
+            float diff = (float)buf[i] - mean;
+            variance_sum += diff * diff;
+        }
+        float variance = variance_sum / (float)buf_len;
+        float sigma = sqrtf(variance); // This is effectively the RMS value
+
+        // 3. Convert RMS to Peak-to-Peak (for a Sine Wave)
+        // Formula: Vpp = Sigma * 2 * sqrt(2)
+        float peak_to_peak = sigma * 2.8284f;
+
+        // 4. Return as rounded integer
+        return (uint16_t)roundf(peak_to_peak);
     }
-
-    float mean = (float)rolling_sum / (float)buf_len;
-    float variance_sum = 0;
-
-    for (uint16_t i = 0; i < buf_len; i++) {
-        float diff = (float)buf[i] - mean;
-        variance_sum += diff * diff;
-    }
-
-    float variance = variance_sum / (float)buf_len;
-    float sigma = sqrtf(variance);
-
-    // // This is the simplified version of your range logic
-    // float std_range = std_multiplier * sigma * mean;
-
-    // // printf("mean:%f sigma:%f\n", mean, sigma);
-
-    // Safety check: Ensure we don't overflow uint16_t (max 65535)
-    // if (std_range > 65535.0f) return 65535;
-    
-    return (uint16_t)sigma;
-}
-
-
 
 int init_inamp_pots() {
     if ( ad5270_init( SRC_INAMP_HANDLE ) != 0) {
@@ -283,6 +311,9 @@ int init_mux(void) {
 }
 
 int adc_init(void) {
+    #ifdef USE_ESP_ADC
+    return init_esp_adc_oneshot();
+    #endif
     return AD7450_init();
 }
 

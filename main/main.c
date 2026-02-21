@@ -8,20 +8,13 @@
 // #include "../Device_Drivers/AD5270_DigiPot.h"
 // #include "../Device_Drivers/AD5930_SigGen.h"
 
-#include "../Application_Layer/calibration.h"
 #include "../Application_Layer/measurement.h"
 #include "../Middle_Ware/hardware.h"
 #include "../Middle_Ware/hardware-test.h"
 
-#define SIG_GEN_FREQ (50000.0f) 
+#define SIG_GEN_FREQ (40000.0f) 
 
 static const char *TAG = "MAIN";
-
-/* Task Details for Calibration Task*/
-// TaskHandle_t cal_task;
-// static const char* cal_task_name = "CalibrationTask";
-// static const configSTACK_DEPTH_TYPE cal_task_stack_depth = 4000;
-// static const UBaseType_t cal_task_priority = 5;
 
 /* Task Details for Measurement Task */
 TaskHandle_t meas_task;
@@ -31,9 +24,6 @@ static const UBaseType_t meas_task_priority = 5;
 
 /* Semaphore for syncing of calibration and measurement task*/
 SemaphoreHandle_t sem_cal_to_meas = NULL;
-
-/* Used to init digital pots*/
-extern int init_inamp_pots();
 
 void app_main(void)
 {
@@ -90,20 +80,6 @@ void app_main(void)
 
         
     // test_function();
-
-
-  
-
-    // /* Create a Task to find all the calibration values */
-    // void* cal_arg = NULL;
-    // if ( xTaskCreate( &calibration_task, cal_task_name, cal_task_stack_depth, cal_arg, cal_task_priority, &cal_task ) != pdPASS ) {
-    // #if DEBUG
-    //     ESP_LOGE(TAG, "Failed to create thread");
-    // #endif
-    // } 
- 
- 
-
 
 
     /* Create a Task for Measurement */
