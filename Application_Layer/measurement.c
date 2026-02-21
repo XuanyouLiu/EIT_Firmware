@@ -8,7 +8,7 @@
 
 static const char *TAG = "MEASUREMENT";
 
-#define AMP_FILTER_ALPHA 1.0f
+#define AMP_FILTER_ALPHA 0.5f
 
 extern uint16_t test_peak_to_peak();
 
@@ -27,6 +27,7 @@ void measurement_task(void* args) {
 
         set_src_inamp_gain(300);
         set_sense_inamp_gain(30);
+        #include "esp_rom_sys.h"
 
         for (uint8_t src_elec_pair = 0; src_elec_pair < NUM_ELECTRODE_PAIRS; src_elec_pair++) {
             for (uint8_t sense_elec_pair = 0; sense_elec_pair < NUM_SENSE_PAIRS; sense_elec_pair++) {
@@ -39,6 +40,8 @@ void measurement_task(void* args) {
                 }
 
 
+
+
                 uint16_t amplitude = test_peak_to_peak();
 
                 if (idx < total_measurements) {
@@ -49,6 +52,7 @@ void measurement_task(void* args) {
                     idx++;
                 }
             }
+                        esp_rom_delay_us(100);
         }
 
         for (uint8_t i = 0; i < total_measurements; i++) {
