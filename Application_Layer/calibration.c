@@ -10,15 +10,6 @@ static const char *TAG = "CALIBRATION";
 const uint16_t SCR_RDATA_CONST = 100; //Fixed source gain value
 const uint16_t SNS_RDATA_CONST = 100; //Fixed sense gain value
 
-static uint16_t mean_u16(const uint16_t *data, size_t len)
-{
-    uint32_t sum = 0;
-    for (size_t i = 0; i < len; i++) {
-        sum += data[i];
-    }
-    return (uint16_t)(sum / len);
-}
-
 /* 2d array to hold calibration values and electrode mappings */
 Calibration_t pair_calibration_map[NUM_ELECTRODE_PAIRS][NUM_SENSE_PAIRS] = {
     [0][0] = {.src_pos = 1, .src_neg = 2, .sense_pos = 3, .sense_neg = 4},
@@ -114,7 +105,7 @@ void calibration_task(void* args) {
                 continue;
             }
 
-            curr_config->reference_amp = mean_u16(tare_samples, buffer_len);
+            curr_config->reference_amp = test_std_dev_mag((int16_t*)tare_samples, buffer_len, 2);
 
             ESP_LOGI(TAG, "Tare[%u][%u] reference_amp=%u",
                      src_elec_pair,
@@ -170,6 +161,7 @@ void calibrate(void) {
                 ESP_LOGE(TAG, "Failed to set mux for tare pair [%u][%u]", src_elec_pair, sense_elec_pair);
                 #endif
                 continue;
+                
             }
 
             vTaskDelay(1);
@@ -183,7 +175,7 @@ void calibrate(void) {
                 continue;
             }
 
-            curr_config->reference_amp = mean_u16(tare_samples, buffer_len);
+            curr_config->reference_amp = test_std_dev_mag((int16_t*)tare_samples, buffer_len, 2);
 
             ESP_LOGI(TAG, "Tare[%u][%u] reference_amp=%u",
                      src_elec_pair,

@@ -26,14 +26,4 @@ int AD7450_init();
  */
 int AD7450_Read(uint16_t *buf, uint32_t len);
 
-/**
- * @brief Direct register-level 16-bit SPI read (bypasses all LL wrapper functions).
- * 
- * Writes directly to SPI2 peripheral registers without calling any HAL/LL functions.
- * Requires AD7450_init() to be called first to initialize SPI bus.
- * 
- * @return 16-bit value read from ADC
- */
-uint16_t AD7450_Read_Direct_Registers(void);
-
 #endif // AD7450_ADC_H

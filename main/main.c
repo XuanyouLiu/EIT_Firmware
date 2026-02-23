@@ -80,7 +80,7 @@ void app_main(void)
 
 
         
-    test_function();
+    // test_function();
 
     /* Run calibration */
     calibrate();

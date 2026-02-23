@@ -64,7 +64,7 @@ static const spi_bus_config_t buscfg = {
 };
 
 int init_spi(void) {
-    esp_err_t ret = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO); //SPI_DMA_DISABLED
+    esp_err_t ret = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_DISABLED);
     if (ret == ESP_OK) {
         #if DEBUG
         ESP_LOGI(TAG, "SPI bus initialized successfully");

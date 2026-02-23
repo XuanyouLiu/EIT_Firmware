@@ -22,12 +22,12 @@ int test_adc(void) {
     }
     
     while(1) {
-        if ( AD7450_Read(buf, 64) != 0) {
+        if ( AD7450_Read(buf, 1) != 0) {
             ESP_LOGE(TAG, "test_adc failed");   
             return -1;
         }
 
-        for (int i = 0; i < 64; i++) {
+        for (int i = 0; i < 1; i++) {
             ESP_LOGI(TAG, "buf[%d]=%u", i, buf[i]);
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
