@@ -9,6 +9,7 @@
 // #include "../Device_Drivers/AD5930_SigGen.h"
 
 #include "../Application_Layer/measurement.h"
+#include "../Application_Layer/calibration.h"
 #include "../Middle_Ware/hardware.h"
 #include "../Middle_Ware/hardware-test.h"
 
@@ -79,8 +80,10 @@ void app_main(void)
 
 
         
-    // test_function();
+    test_function();
 
+    /* Run calibration */
+    calibrate();
 
     /* Create a Task for Measurement */
     if ( xTaskCreate( &measurement_task, meas_task_name, meas_task_stack_depth, NULL, meas_task_priority, &meas_task ) != pdPASS ) {

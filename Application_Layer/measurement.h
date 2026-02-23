@@ -14,8 +14,7 @@ extern TaskHandle_t meas_task;
 extern SemaphoreHandle_t sem_cal_to_meas;
 
 /* Array of buffers holding chunks of ADC readings */
-extern int16_t adc_packet_buffers[MAX_ADC_PACKETS][ADC_READINGS_PER_PACKET];
-extern int16_t adc_packet_buffers[MAX_ADC_PACKETS][ADC_READINGS_PER_PACKET];
+extern uint16_t adc_packet_buffers[MAX_ADC_PACKETS][ADC_READINGS_PER_PACKET];
 
 
 

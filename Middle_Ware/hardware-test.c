@@ -135,7 +135,7 @@ void test_function(void) {
 
     set_mux(1, 2, 3, 4);
     
-    // test_adc();
+    test_adc();
 
     while (1) {
         uint16_t mag = test_peak_to_peak();
