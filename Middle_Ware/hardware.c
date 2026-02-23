@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "driver/spi_master.h"
 #include "esp_adc/adc_oneshot.h"
 #include "../Device_Drivers/AD5270_DigiPot.h"
