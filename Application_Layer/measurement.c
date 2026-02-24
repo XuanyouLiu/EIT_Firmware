@@ -10,9 +10,11 @@
 
 static const char *TAG = "MEASUREMENT";
 
-#define AMP_FILTER_ALPHA 0.5f
+#define AMP_FILTER_ALPHA 0.1f
 
 extern uint16_t test_peak_to_peak();
+
+// #define PROFILE_SAMPLE_RATE
 
 uint16_t adc_packet_buffers[MAX_ADC_PACKETS][ADC_READINGS_PER_PACKET] = {0};
 
@@ -58,15 +60,12 @@ void measurement_task(void* args) {
             }
         }
 
-                        esp_rom_delay_us(100000);
-
-
-
-
         for (volatile uint8_t i = 0; i < total_measurements; i++) {
             printf("%d ", amps[i]);
         }
-        // #define PROFILE_SAMPLE_RATE
+
+        vTaskDelay(pdMS_TO_TICKS(50));
+
 #ifdef PROFILE_SAMPLE_RATE
         int64_t now_us = esp_timer_get_time();
         int64_t delta_us = (prev_us > 0) ? (now_us - prev_us) : 0;

@@ -245,18 +245,16 @@ uint16_t test_std_dev_mag(int16_t* buf, uint16_t buf_len, float multiplier) {
         }
         float mean = (float)total_sum / (float)buf_len;
 
-        // 2. Calculate Variance
-        float variance_sum = 0;
+        // 2. Calculate Mean Absolute Deviation
+        float deviation_sum = 0;
         for (uint16_t i = 0; i < buf_len; i++) {
             float diff = (float)buf[i] - mean;
-            variance_sum += diff * diff;
+            deviation_sum += fabsf(diff);
         }
-        float variance = variance_sum / (float)buf_len;
-        float sigma = sqrtf(variance); // This is effectively the RMS value
+        float mad = deviation_sum / (float)buf_len;
 
-        // 3. Convert RMS to Peak-to-Peak (for a Sine Wave)
-        // Formula: Vpp = Sigma * 2 * sqrt(2)
-        float peak_to_peak = sigma;
+        // 3. Return MAD as amplitude measure
+        float peak_to_peak = mad;
 
         // 4. Return as rounded integer
         return (uint16_t)roundf(peak_to_peak);

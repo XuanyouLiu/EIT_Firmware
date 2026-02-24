@@ -29,9 +29,31 @@ int test_adc(void) {
         int64_t window_start_us = esp_timer_get_time();
         int64_t window_end_us = window_start_us + ((int64_t)ADC_STREAM_ACTIVE_MS * 1000);
 
+        uint16_t adc_buffer[250];
+        uint16_t buffer_index = 0;
+
         while (esp_timer_get_time() < window_end_us) {
-            uint16_t adc_value = AD7450_Read_Direct_Registers();
-            printf("ADC: %u\n", adc_value);
+            uint16_t adc_value = 0;
+            if (adcRead(&adc_value, 1) != 0) {
+                continue;
+            }
+            
+            adc_buffer[buffer_index++] = adc_value;
+            
+            // Print buffer when full
+            if (buffer_index >= 250) {
+                for (uint16_t i = 0; i < 250; i++) {
+                    printf("ADC: %u\n", adc_buffer[i]);
+                }
+                buffer_index = 0;
+            }
+        }
+
+        // Print remaining samples in buffer
+        if (buffer_index > 0) {
+            for (uint16_t i = 0; i < buffer_index; i++) {
+                printf("ADC: %u\n", adc_buffer[i]);
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(ADC_STREAM_BREAK_MS));
@@ -64,18 +86,18 @@ int test_inamp_pots(void) {
         return -1;
     }
     
-    for (int i = 512; i > 0; i--) {
+    for (int i = 500; i > 0; i -= 5) {
         vTaskDelay(pdMS_TO_TICKS(100));
         ESP_LOGI(TAG, "Setting src/sns gain to %d", i);
-        if (set_src_inamp_gain(i) != 0) {
-            ESP_LOGE(TAG, "test_inamp_pots set src gain failed");
-            return -1;
-        }
-        
-        // if (set_sense_inamp_gain(i) != 0) {
-        //     ESP_LOGE(TAG, "test_inamp_pots set sense gain failed");
+        // if (set_src_inamp_gain(i) != 0) {
+        //     ESP_LOGE(TAG, "test_inamp_pots set src gain failed");
         //     return -1;
         // }
+        
+        if (set_sense_inamp_gain(i) != 0) {
+            ESP_LOGE(TAG, "test_inamp_pots set sense gain failed");
+            return -1;
+        }
     }
 
     ESP_LOGI(TAG, "test_inamp_pots passed");
@@ -129,14 +151,15 @@ int test_dsp(bool clipped, float clip_percent) {
 }
 
 void test_function(void) {
+        set_mux(1, 2, 3, 4);
+
     // test_signal_gen();
     // test_inamp_pots();
-    set_src_inamp_gain(100);
+    set_src_inamp_gain(80);
     set_sense_inamp_gain(10);
     // test_mux();
 
 
-    set_mux(5, 6, 7, 8);
 
     test_adc();
     

@@ -5,9 +5,10 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include <string.h>
+#include "freertos/FreeRTOS.h"
 #include "soc/spi_struct.h"  // For spi_dev_t and GPSPI2
 
-// #define USE_DIRECT_REGISTERS
+#define USE_DIRECT_REGISTERS
 
 // #define PROFILE_SAMPLE_RATE
 
@@ -27,7 +28,7 @@ int AD7450_init() {
         .address_bits = 0,
         .dummy_bits = 0,
         .mode = 2, // CPOL=1, CPHA=0 (SCLK idle high, sample on rising edge)
-        .clock_speed_hz = SPI_MASTER_FREQ_80M, // 8 MHz
+        .clock_speed_hz = 8 * 1000 * 1000, // 8 MHz
         .spics_io_num = PIN_CS_ADC,
         .queue_size = AD7450_QUEUE_SIZE,
     };
@@ -57,10 +58,22 @@ int AD7450_init() {
 int AD7450_Read(uint16_t *buf, uint32_t len)
 {
 #ifdef USE_DIRECT_REGISTERS
+    if (!ad7450_handle) {
+        ESP_LOGE(TAG, "AD7450 read failed: device not initialized");
+        return -1;
+    }
+
+    // if (spi_device_acquire_bus(ad7450_handle, portMAX_DELAY) != ESP_OK) {
+    //     ESP_LOGE(TAG, "AD7450 read failed: could not acquire SPI bus");
+    //     return -1;
+    // }
+
     // Use direct register access (bypasses all HAL/LL layers)
     for (uint32_t i = 0; i < len; i++) {
         buf[i] = AD7450_Read_Direct_Registers();
     }
+
+    // spi_device_release_bus(ad7450_handle);
     return 0;
 #else
     // Use ESP-IDF SPI driver
@@ -79,9 +92,8 @@ int AD7450_Read(uint16_t *buf, uint32_t len)
         }
 
         uint16_t result = (uint16_t)((rx[0] << 8) | rx[1]);
-        // AD7450 is 12-bit ADC, data is left-aligned in 16-bit word
-        // Extract 12-bit value from bits 15:4
-        buf[i] = (result >> 4) & 0xFFF;
+        // AD7450 sample is 12-bit; keep the lower 12 bits
+        buf[i] = result & 0x0FFF;
     }
 
     return 0;
@@ -107,15 +119,17 @@ uint16_t AD7450_Read_Direct_Registers(void)
 #endif
 
     spi_dev_t *hw = &GPSPI2;
-    
+
     // Save original register values to restore later
     uint32_t orig_ctrl = hw->ctrl.val;
     uint32_t orig_user = hw->user.val;
+    uint32_t orig_user1 = hw->user1.val;
+    uint32_t orig_user2 = hw->user2.val;
     uint32_t orig_ms_dlen = hw->ms_dlen.val;
     uint32_t orig_addr = hw->addr;
     uint32_t orig_misc = hw->misc.val;
     uint32_t orig_dma_conf = hw->dma_conf.val;
-    
+
     static bool cs_gpio_configured = false;
     if (!cs_gpio_configured) {
         gpio_reset_pin(PIN_CS_ADC);
@@ -125,50 +139,88 @@ uint16_t AD7450_Read_Direct_Registers(void)
         for (volatile int i = 0; i < 100; i++);
     }
     
+    // [spi_ll_clear_int_stat]
+    hw->dma_int_raw.val = 0;
+
+    // [spi_ll_get_running_cmd]
+    while (hw->cmd.usr || hw->cmd.update) {
+    }
+
     gpio_set_level(PIN_CS_ADC, 0);
-    
-    hw->dma_int_raw.val = 0x00000000;
-    
-    while (hw->cmd.val != 0);
-    
+
+    // [spi_ll_master_set_line_mode]
     hw->ctrl.val = 0x00340000;
     hw->user.val = 0x18000241;
-    
+
+    // [spi_ll_set_dummy]
+    hw->user.usr_dummy = 0;
+
+    // [spi_ll_set_mosi_bitlen] + [spi_ll_set_miso_bitlen]
     hw->ms_dlen.val = 0x0000000f;
+
+    // [spi_ll_set_dummy] + [spi_ll_set_addr_bitlen] + [spi_ll_set_command_bitlen]
+    // Write full register values to match trace exactly:
+    //   user1.val = 0xf87f00ff (usr_addr_bitlen=-1, usr_dummy_cyclelen=-1)
+    //   user2.val = 0xf8000000 (usr_command_bitlen=-1, usr_command_value=0)
+    hw->user1.val = 0xf87f00ff;
+    hw->user2.val = 0xf8000000;
+    hw->user.usr_addr = 0;
+    hw->user.usr_command = 0;
+
+    // [spi_ll_set_address]
     hw->addr = 0x00000000;
+
+    // [spi_ll_master_keep_cs]
     hw->misc.val = 0x2000003e;
-    
+
+    // [spi_ll_enable_mosi] + [spi_ll_enable_miso]
+    hw->user.usr_mosi = 1;
+    hw->user.usr_miso = 1;
+
     hw->dma_conf.dma_rx_ena = 0;
     hw->dma_conf.dma_tx_ena = 0;
-    
+
+    // [spi_ll_apply_config]
     hw->cmd.update = 1;
-    while (hw->cmd.update);
-    
+    while (hw->cmd.update) {
+    }
+
+    // [spi_ll_user_start]
     hw->cmd.usr = 1;
-    
-    while ((hw->dma_int_raw.val & 0x00001000) == 0);
-    
+
+    // [spi_ll_usr_is_done]
+    while (hw->cmd.usr) {
+    }
+
+    // [spi_ll_read_buffer]
     uint32_t data_word = hw->data_buf[0];
-    
+
     gpio_set_level(PIN_CS_ADC, 1);
-    
+
+    // Clear completion interrupt for next transaction
+    hw->dma_int_raw.val = 0;
+
     // Restore original register values
     hw->ctrl.val = orig_ctrl;
     hw->user.val = orig_user;
+    hw->user1.val = orig_user1;
+    hw->user2.val = orig_user2;
     hw->ms_dlen.val = orig_ms_dlen;
     hw->addr = orig_addr;
     hw->misc.val = orig_misc;
     hw->dma_conf.val = orig_dma_conf;
-    
-    uint8_t lsb = (data_word >> 0) & 0xFF;
-    uint8_t msb = (data_word >> 8) & 0xFF;
-    
-    uint16_t result = ((uint16_t)msb << 8) | lsb;
-    
-    // AD7450 is 12-bit ADC, data is left-aligned in 16-bit word
-    // Extract 12-bit value from bits 15:4
-    uint16_t adc_12bit = (result >> 4) & 0xFFF;
-    
+
+    // ESP-IDF's spi_ll_read_buffer copies bytes in little-endian memory order:
+    // For data_buf[0]=0xffffc407: byte[0]=0x07, byte[1]=0xc4
+    // Then middleware does (rx[0]<<8)|rx[1] = (0x07<<8)|0xc4 = 0x07c4 = 1988
+    // So we must byte-swap the lower 16 bits to match.
+    uint8_t lo = (uint8_t)(data_word & 0xFF);          // rx[0]
+    uint8_t hi = (uint8_t)((data_word >> 8) & 0xFF);    // rx[1]
+    uint16_t result = (lo << 8) | hi;
+
+    // AD7450 sample is 12-bit; keep the lower 12 bits
+    uint16_t adc_12bit = result & 0x0FFF;
+
 #ifdef PROFILE_SAMPLE_RATE
     int64_t end_us = esp_timer_get_time();
     printf("adc_us: %lld\n", (long long)(end_us - start_us));
