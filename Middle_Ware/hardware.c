@@ -256,7 +256,7 @@ uint16_t test_std_dev_mag(int16_t* buf, uint16_t buf_len, float multiplier) {
 
         // 3. Convert RMS to Peak-to-Peak (for a Sine Wave)
         // Formula: Vpp = Sigma * 2 * sqrt(2)
-        float peak_to_peak = sigma * 2.8284f;
+        float peak_to_peak = sigma;
 
         // 4. Return as rounded integer
         return (uint16_t)roundf(peak_to_peak);

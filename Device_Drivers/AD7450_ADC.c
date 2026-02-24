@@ -7,12 +7,14 @@
 #include <string.h>
 #include "soc/spi_struct.h"  // For spi_dev_t and GPSPI2
 
-#define USE_DIRECT_REGISTERS
+// #define USE_DIRECT_REGISTERS
+
+// #define PROFILE_SAMPLE_RATE
 
 static const char *TAG = "AD7450";
 static spi_device_handle_t ad7450_handle = NULL;
 
-static inline uint16_t AD7450_Read_Direct_Registers(void);
+uint16_t AD7450_Read_Direct_Registers(void);
 
 int AD7450_init() {
     if (ad7450_handle != NULL) {
@@ -76,7 +78,10 @@ int AD7450_Read(uint16_t *buf, uint32_t len)
             return -1;
         }
 
-        buf[i] = (uint16_t)((rx[0] << 8) | rx[1]);
+        uint16_t result = (uint16_t)((rx[0] << 8) | rx[1]);
+        // AD7450 is 12-bit ADC, data is left-aligned in 16-bit word
+        // Extract 12-bit value from bits 15:4
+        buf[i] = (result >> 4) & 0xFFF;
     }
 
     return 0;
@@ -95,9 +100,21 @@ int AD7450_Read(uint16_t *buf, uint32_t len)
  * 
  * @return 16-bit value read from SPI data buffer
  */
-static inline uint16_t AD7450_Read_Direct_Registers(void)
+uint16_t AD7450_Read_Direct_Registers(void)
 {
+#ifdef PROFILE_SAMPLE_RATE
+    int64_t start_us = esp_timer_get_time();
+#endif
+
     spi_dev_t *hw = &GPSPI2;
+    
+    // Save original register values to restore later
+    uint32_t orig_ctrl = hw->ctrl.val;
+    uint32_t orig_user = hw->user.val;
+    uint32_t orig_ms_dlen = hw->ms_dlen.val;
+    uint32_t orig_addr = hw->addr;
+    uint32_t orig_misc = hw->misc.val;
+    uint32_t orig_dma_conf = hw->dma_conf.val;
     
     static bool cs_gpio_configured = false;
     if (!cs_gpio_configured) {
@@ -121,6 +138,9 @@ static inline uint16_t AD7450_Read_Direct_Registers(void)
     hw->addr = 0x00000000;
     hw->misc.val = 0x2000003e;
     
+    hw->dma_conf.dma_rx_ena = 0;
+    hw->dma_conf.dma_tx_ena = 0;
+    
     hw->cmd.update = 1;
     while (hw->cmd.update);
     
@@ -132,8 +152,27 @@ static inline uint16_t AD7450_Read_Direct_Registers(void)
     
     gpio_set_level(PIN_CS_ADC, 1);
     
+    // Restore original register values
+    hw->ctrl.val = orig_ctrl;
+    hw->user.val = orig_user;
+    hw->ms_dlen.val = orig_ms_dlen;
+    hw->addr = orig_addr;
+    hw->misc.val = orig_misc;
+    hw->dma_conf.val = orig_dma_conf;
+    
     uint8_t lsb = (data_word >> 0) & 0xFF;
     uint8_t msb = (data_word >> 8) & 0xFF;
     
-    return ((uint16_t)msb << 8) | lsb;
+    uint16_t result = ((uint16_t)msb << 8) | lsb;
+    
+    // AD7450 is 12-bit ADC, data is left-aligned in 16-bit word
+    // Extract 12-bit value from bits 15:4
+    uint16_t adc_12bit = (result >> 4) & 0xFFF;
+    
+#ifdef PROFILE_SAMPLE_RATE
+    int64_t end_us = esp_timer_get_time();
+    printf("adc_us: %lld\n", (long long)(end_us - start_us));
+#endif
+
+    return adc_12bit;
 }

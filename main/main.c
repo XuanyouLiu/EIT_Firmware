@@ -4,6 +4,8 @@
 #include "freertos/task.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_task_wdt.h"
+
 
 // #include "../Device_Drivers/AD5270_DigiPot.h"
 // #include "../Device_Drivers/AD5930_SigGen.h"
@@ -13,7 +15,7 @@
 #include "../Middle_Ware/hardware.h"
 #include "../Middle_Ware/hardware-test.h"
 
-#define SIG_GEN_FREQ (40000.0f) 
+#define SIG_GEN_FREQ (2000.0f) 
 
 static const char *TAG = "MAIN";
 
@@ -28,6 +30,9 @@ SemaphoreHandle_t sem_cal_to_meas = NULL;
 
 void app_main(void)
 {
+
+    esp_task_wdt_deinit();
+
     /* Create Semaphore */
     sem_cal_to_meas = xSemaphoreCreateBinary();
 
@@ -80,8 +85,9 @@ void app_main(void)
 
 
         
-    // test_function();
+    test_function();
 
+    
     /* Run calibration */
     calibrate();
 

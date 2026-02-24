@@ -3,12 +3,11 @@
 #include "hardware.h"
 #include "esp_err.h"
 #include "esp_log.h"
-#include "esp_task_wdt.h"
 
 static const char *TAG = "CALIBRATION";
 
 const uint16_t SCR_RDATA_CONST = 100; //Fixed source gain value
-const uint16_t SNS_RDATA_CONST = 100; //Fixed sense gain value
+const uint16_t SNS_RDATA_CONST = 10; //Fixed sense gain value
 
 /* 2d array to hold calibration values and electrode mappings */
 Calibration_t pair_calibration_map[NUM_ELECTRODE_PAIRS][NUM_SENSE_PAIRS] = {
@@ -56,11 +55,8 @@ Calibration_t pair_calibration_map[NUM_ELECTRODE_PAIRS][NUM_SENSE_PAIRS] = {
 
 void calibration_task(void* args) {
 
-    /* Disable task watchdog for this task */
-    esp_task_wdt_deinit();
 
     /* Small startup delay */
-    vTaskDelay(pdMS_TO_TICKS(1000));
 
     if ( set_src_inamp_gain(SCR_RDATA_CONST) != ESP_OK) {
         #if DEBUG
@@ -127,8 +123,6 @@ void calibration_task(void* args) {
 
 void calibrate(void) {
 
-    /* Disable task watchdog for this task */
-    esp_task_wdt_deinit();
 
     /* Small startup delay */
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -161,10 +155,9 @@ void calibrate(void) {
                 ESP_LOGE(TAG, "Failed to set mux for tare pair [%u][%u]", src_elec_pair, sense_elec_pair);
                 #endif
                 continue;
-                
+
             }
 
-            vTaskDelay(1);
 
             uint16_t tare_samples[BUFFER_LEN] = {0};
             size_t buffer_len = sizeof(tare_samples) / sizeof(tare_samples[0]);

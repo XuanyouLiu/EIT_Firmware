@@ -26,4 +26,13 @@ int AD7450_init();
  */
 int AD7450_Read(uint16_t *buf, uint32_t len);
 
+/**
+ * @brief Read one ADC sample using direct SPI register access.
+ *
+ * SPI must be initialized first with AD7450_init().
+ *
+ * @return 12-bit ADC value.
+ */
+uint16_t AD7450_Read_Direct_Registers(void);
+
 #endif // AD7450_ADC_H

@@ -4,33 +4,37 @@
 #include "../Device_Drivers/AD7450_ADC.h"
 #include "test_data_gen.h"
 #include "freertos/FreeRTOS.h"
+#include "esp_timer.h"
 
 #include <math.h>
 
 #define TARGET_BUCKET 7
+#define ADC_STREAM_ACTIVE_MS 400
+#define ADC_STREAM_BREAK_MS 1000
 
 static const char *TAG = "HARDWARE_TEST";
 
 int test_adc(void) {
-    uint16_t buf[64];
-    
     if ( AD7450_init() != 0) {
         // #if DEBUG
         ESP_LOGE(TAG, "test_adc init failed");
         // #endif
         return -1;
     }
+
+            set_mux(1, 2, 3, 4);
+
     
-    while(1) {
-        if ( AD7450_Read(buf, 1) != 0) {
-            ESP_LOGE(TAG, "test_adc failed");   
-            return -1;
+    while (1) {
+        int64_t window_start_us = esp_timer_get_time();
+        int64_t window_end_us = window_start_us + ((int64_t)ADC_STREAM_ACTIVE_MS * 1000);
+
+        while (esp_timer_get_time() < window_end_us) {
+            uint16_t adc_value = AD7450_Read_Direct_Registers();
+            printf("ADC: %u\n", adc_value);
         }
 
-        for (int i = 0; i < 1; i++) {
-            ESP_LOGI(TAG, "buf[%d]=%u", i, buf[i]);
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(ADC_STREAM_BREAK_MS));
     }
     return 0;
 }
@@ -94,7 +98,6 @@ int test_mux(void) {
             #endif
             return -1;
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
     }
     ESP_LOGI(TAG, "test_mux passed");
     return 0;
@@ -128,14 +131,15 @@ int test_dsp(bool clipped, float clip_percent) {
 void test_function(void) {
     // test_signal_gen();
     // test_inamp_pots();
+    set_src_inamp_gain(100);
+    set_sense_inamp_gain(10);
     // test_mux();
 
-    set_src_inamp_gain(511);
-    set_sense_inamp_gain(300);
 
-    set_mux(1, 2, 3, 4);
-    
+    set_mux(5, 6, 7, 8);
+
     test_adc();
+    
 
     while (1) {
         uint16_t mag = test_peak_to_peak();
@@ -158,7 +162,7 @@ uint16_t test_peak_to_peak() {
     // for (int i = 0; i < 64; i++) {
     //     ESP_LOGI(TAG, "buf[%d] = %d", i, buf[i]);
     // }
-    return test_std_dev_mag((int16_t *)buf, 64, 2);
+    return test_std_dev_mag((int16_t *)buf, 64, 1);
 
 
 }
@@ -175,23 +179,15 @@ uint16_t test_std_dev_mag_test(int16_t* buf, uint16_t buf_len, float std_multipl
     }
 
     float mean = (float)rolling_sum / (float)buf_len;
-    float variance_sum = 0;
+    float abs_dev_sum = 0;
 
     for (uint16_t i = 0; i < buf_len; i++) {
         float diff = (float)buf[i] - mean;
-        variance_sum += diff * diff;
+        abs_dev_sum += (diff >= 0 ? diff : -diff); // absolute value
     }
 
-    float variance = variance_sum / (float)buf_len;
-    float sigma = sqrtf(variance);
+    float mean_abs_dev = abs_dev_sum / (float)buf_len;
 
-    // // This is the simplified version of your range logic
-    // float std_range = std_multiplier * sigma * mean;
-
-    // // printf("mean:%f sigma:%f\n", mean, sigma);
-
-    // Safety check: Ensure we don't overflow uint16_t (max 65535)
-    // if (std_range > 65535.0f) return 65535;
-    
-    return (uint16_t)sigma;
+    // Return mean absolute deviation scaled by the multiplier
+    return (uint16_t)(mean_abs_dev * 1);
 }
