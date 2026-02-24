@@ -156,7 +156,7 @@ void test_function(void) {
     // test_signal_gen();
     // test_inamp_pots();
     set_src_inamp_gain(80);
-    set_sense_inamp_gain(10);
+    set_sense_inamp_gain(100);
     // test_mux();
 
 
@@ -174,18 +174,20 @@ void test_function(void) {
 }
 
 uint16_t test_peak_to_peak() {
-    uint16_t buf[64];
+    uint16_t buf[200];
 
-    if (adcRead(buf, 64) != 0) {
+    if (adcRead(buf, 200) != 0) {
         ESP_LOGE(TAG, "test_adc failed");   
         return -1;
     }
 
 
-    // for (int i = 0; i < 64; i++) {
+    // for (int i = 0; i < 200; i++) {
     //     ESP_LOGI(TAG, "buf[%d] = %d", i, buf[i]);
     // }
-    return test_std_dev_mag((int16_t *)buf, 64, 1);
+
+
+    return test_std_dev_mag((int16_t *)buf, 200, 1);
 
 
 }

@@ -28,7 +28,7 @@ int AD7450_init() {
         .address_bits = 0,
         .dummy_bits = 0,
         .mode = 2, // CPOL=1, CPHA=0 (SCLK idle high, sample on rising edge)
-        .clock_speed_hz = 8 * 1000 * 1000, // 8 MHz
+        .clock_speed_hz = 20 * 1000 * 1000, // 8 MHz
         .spics_io_num = PIN_CS_ADC,
         .queue_size = AD7450_QUEUE_SIZE,
     };
@@ -189,7 +189,8 @@ uint16_t AD7450_Read_Direct_Registers(void)
     hw->cmd.usr = 1;
 
     // [spi_ll_usr_is_done]
-    while (hw->cmd.usr) {
+    for (volatile int nop_i = 0; nop_i < 100; nop_i++) {
+        asm("nop");
     }
 
     // [spi_ll_read_buffer]

@@ -10,7 +10,7 @@
 
 static const char *TAG = "MEASUREMENT";
 
-#define AMP_FILTER_ALPHA 0.1f
+#define AMP_FILTER_ALPHA 1.0f
 
 extern uint16_t test_peak_to_peak();
 
@@ -57,14 +57,16 @@ void measurement_task(void* args) {
                     curr_config->ewma_amp = filtered_u16;
                     idx++;
                 }
+
             }
+
         }
 
         for (volatile uint8_t i = 0; i < total_measurements; i++) {
             printf("%d ", amps[i]);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        // vTaskDelay(pdMS_TO_TICKS(50));
 
 #ifdef PROFILE_SAMPLE_RATE
         int64_t now_us = esp_timer_get_time();

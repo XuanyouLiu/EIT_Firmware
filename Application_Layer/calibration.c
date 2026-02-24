@@ -6,8 +6,8 @@
 
 static const char *TAG = "CALIBRATION";
 
-const uint16_t SCR_RDATA_CONST = 0; //Fixed source gain value
-const uint16_t SNS_RDATA_CONST = 0; //Fixed sense gain value
+const uint16_t SCR_RDATA_CONST = 80; //Fixed source gain value
+const uint16_t SNS_RDATA_CONST = 100; //Fixed sense gain value
 
 /* 2d array to hold calibration values and electrode mappings */
 Calibration_t pair_calibration_map[NUM_ELECTRODE_PAIRS][NUM_SENSE_PAIRS] = {
