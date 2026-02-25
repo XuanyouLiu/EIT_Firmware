@@ -18,7 +18,7 @@ from pyeit.eit.jac import JAC
 from pyeit.eit.interp2d import sim2pts
 
 # ---------------- Serial configuration ---------------- #
-PORT = "/dev/cu.usbmodem2101"   # modify if your port changes
+PORT = "/dev/cu.usbmodem101"   # modify if your port changes
 BAUD = 115200
 TIMEOUT = 1
 

@@ -10,7 +10,7 @@
 
 static const char *TAG = "MEASUREMENT";
 
-#define AMP_FILTER_ALPHA 1.0f
+#define AMP_FILTER_ALPHA 0.5f
 
 extern uint16_t test_peak_to_peak();
 
@@ -64,9 +64,9 @@ void measurement_task(void* args) {
 
         for (volatile uint8_t i = 0; i < total_measurements; i++) {
             printf("%d ", amps[i]);
+            
         }
 
-        // vTaskDelay(pdMS_TO_TICKS(50));
 
 #ifdef PROFILE_SAMPLE_RATE
         int64_t now_us = esp_timer_get_time();
@@ -74,6 +74,8 @@ void measurement_task(void* args) {
         prev_us = now_us;
         printf("delta_us: %lld\n", (long long)delta_us);
 #else
+        vTaskDelay(pdMS_TO_TICKS(100));
+
         printf("\n");
 #endif
 

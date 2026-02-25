@@ -189,7 +189,7 @@ uint16_t AD7450_Read_Direct_Registers(void)
     hw->cmd.usr = 1;
 
     // [spi_ll_usr_is_done]
-    for (volatile int nop_i = 0; nop_i < 100; nop_i++) {
+    for (volatile int nop_i = 0; nop_i < 16; nop_i++) {
         asm("nop");
     }
 

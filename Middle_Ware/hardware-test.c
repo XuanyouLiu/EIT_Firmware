@@ -174,9 +174,9 @@ void test_function(void) {
 }
 
 uint16_t test_peak_to_peak() {
-    uint16_t buf[200];
+    uint16_t buf[64];
 
-    if (adcRead(buf, 200) != 0) {
+    if (adcRead(buf, 64) != 0) {
         ESP_LOGE(TAG, "test_adc failed");   
         return -1;
     }
@@ -187,7 +187,7 @@ uint16_t test_peak_to_peak() {
     // }
 
 
-    return test_std_dev_mag((int16_t *)buf, 200, 1);
+    return test_std_dev_mag((int16_t *)buf, 64, 1);
 
 
 }

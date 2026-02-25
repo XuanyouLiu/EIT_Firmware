@@ -15,7 +15,7 @@
 #include "../Middle_Ware/hardware.h"
 #include "../Middle_Ware/hardware-test.h"
 
-#define SIG_GEN_FREQ (100000.0f) 
+#define SIG_GEN_FREQ (80000.0f) 
 
 static const char *TAG = "MAIN";
 
