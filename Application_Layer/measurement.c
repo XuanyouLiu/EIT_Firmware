@@ -1,4 +1,6 @@
+#include <inttypes.h>
 #include <stdio.h>
+
 #include "measurement.h"
 #include "calibration.h"
 #include "hardware.h"
@@ -12,11 +14,20 @@ static const char *TAG = "MEASUREMENT";
 
 #define AMP_FILTER_ALPHA 0.5f
 
-extern uint16_t test_peak_to_peak();
-
 // #define PROFILE_SAMPLE_RATE
 
 uint16_t adc_packet_buffers[MAX_ADC_PACKETS][ADC_READINGS_PER_PACKET] = {0};
+
+uint16_t calc_peak_to_peak(void) {
+    uint16_t buf[512];
+
+    if (adcRead(buf, 512) != 0) {
+        ESP_LOGE(TAG, "Failed to read ADC samples");
+        return 0;
+    }
+
+    return calc_std_dev_mag((int16_t *)buf, 512, 1);
+}
 
 void measurement_task(void* args) {
     const uint8_t total_measurements = NUM_ELECTRODE_PAIRS * NUM_SENSE_PAIRS;
@@ -24,7 +35,9 @@ void measurement_task(void* args) {
     ESP_LOGI(TAG, "Measurement task starting");
 
     uint16_t amps[NUM_ELECTRODE_PAIRS * NUM_SENSE_PAIRS] = {0};
-    int64_t prev_us = 0;
+#ifdef PROFILE_SAMPLE_RATE
+    uint32_t prev_us = 0;
+#endif
 
     set_src_inamp_gain(SCR_RDATA_CONST);
     set_sense_inamp_gain(SNS_RDATA_CONST);
@@ -42,16 +55,14 @@ void measurement_task(void* args) {
                     continue;
                 }
 
-                esp_rom_delay_us(100);
+                esp_rom_delay_us(300);
 
-                uint16_t amplitude = test_peak_to_peak();
-                uint16_t tare_baseline = curr_config->reference_amp;
-                int32_t baseline_subtracted = (int32_t)amplitude - (int32_t)tare_baseline;
+                uint16_t amplitude = calc_peak_to_peak();
 
                 if (idx < total_measurements) {
                     float previous = (float)amps[idx];
                     float filtered = (1.0f - AMP_FILTER_ALPHA) * previous +
-                                     AMP_FILTER_ALPHA * (float)baseline_subtracted;
+                                     AMP_FILTER_ALPHA * (float)amplitude;
                     uint16_t filtered_u16 = (uint16_t)filtered;
                     amps[idx] = amplitude;
                     curr_config->ewma_amp = filtered_u16;
@@ -62,21 +73,19 @@ void measurement_task(void* args) {
 
         }
 
-        for (volatile uint8_t i = 0; i < total_measurements; i++) {
-            printf("%d ", amps[i]);
-            
+        for (uint8_t i = 0; i < total_measurements; i++) {
+            printf("%u ", amps[i]);
         }
+        printf("\n");
 
 
 #ifdef PROFILE_SAMPLE_RATE
-        int64_t now_us = esp_timer_get_time();
-        int64_t delta_us = (prev_us > 0) ? (now_us - prev_us) : 0;
-        prev_us = now_us;
-        printf("delta_us: %lld\n", (long long)delta_us);
+        uint32_t timestamp_us = (uint32_t)esp_timer_get_time();
+        uint32_t delta_us = (prev_us > 0) ? (timestamp_us - prev_us) : 0;
+        prev_us = timestamp_us;
+        printf("delta_us: %" PRIu32 "\n", delta_us);
 #else
-        vTaskDelay(pdMS_TO_TICKS(100));
-
-        printf("\n");
+        // vTaskDelay(pdMS_TO_TICKS(100));
 #endif
 
         #if DEBUG

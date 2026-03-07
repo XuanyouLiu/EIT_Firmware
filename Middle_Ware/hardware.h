@@ -14,8 +14,8 @@
 
 #ifdef ESP32C3
 // SPI bus pins (XIAO ESP32-C3)
-#define PIN_SPI_MOSI      GPIO_NUM_10    
-#define PIN_SPI_MISO      GPIO_NUM_9   
+#define PIN_SPI_MOSI      GPIO_NUM_9    
+#define PIN_SPI_MISO      GPIO_NUM_10   
 #define PIN_SPI_SCLK      GPIO_NUM_8   
 
 // Chip Selects
@@ -134,5 +134,5 @@ bool detect_opamp_clipping(int16_t *buf, size_t len, uint32_t threshold, uint8_t
 /**
  * @brief this function takes in a buffer of size Nfloat and returns a mag of that std dev range of value
  */
-uint16_t test_std_dev_mag(int16_t* buf, uint16_t buf_len, float std_multiplier);
+uint16_t calc_std_dev_mag(int16_t* buf, uint16_t buf_len, float std_multiplier);
 

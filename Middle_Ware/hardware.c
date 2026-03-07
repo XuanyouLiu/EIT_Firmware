@@ -235,7 +235,7 @@ uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end) {
 
 
 
-uint16_t test_std_dev_mag(int16_t* buf, uint16_t buf_len, float multiplier) {
+uint16_t calc_std_dev_mag(int16_t* buf, uint16_t buf_len, float multiplier) {
     if (buf_len == 0) return 0;
 
     // 1. Calculate Mean using 32-bit integer for speed

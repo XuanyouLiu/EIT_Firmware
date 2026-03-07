@@ -48,12 +48,6 @@ int test_dsp(bool clipped, float clip_percent);
 
 
 /**
- * @brief returns a magnitude of adc using a helper peak to peak caluclatr
- */
-
-uint16_t test_peak_to_peak();
-
-/**
  * @brief this function takes in a buffer of size Nfloat and returns a mag of that std dev range of value
  */
 uint16_t test_std_dev_mag_test(int16_t* buf, uint16_t buf_len, float std_multiplier);

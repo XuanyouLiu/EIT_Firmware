@@ -14,7 +14,6 @@
 
 
 
-void calibration_task(void* args);
 void calibrate(void);
 
 /* Structure that holds calibration values and electrode number mappings*/
@@ -25,8 +24,7 @@ typedef struct {
     const uint8_t sense_pos; //positive sense electrode number
     const uint8_t sense_neg; //negative sense electrode number
         
-    uint16_t reference_amp; //The tare amplitude sensed in the calibration 
-    uint16_t ewma_amp; //Baseline-subtracted exponential moving average amplitude
+    uint16_t ewma_amp;
     
 } Calibration_t;
 
@@ -35,10 +33,7 @@ extern const uint16_t SNS_RDATA_CONST; //Fixed sense gain value
 /* 2d array to hold calibration values and electrode mappings */
 extern Calibration_t pair_calibration_map [NUM_ELECTRODE_PAIRS][NUM_SENSE_PAIRS];
 
-/* Tasks and Primative Handles*/
-extern TaskHandle_t cal_task;
 extern TaskHandle_t meas_task;
-extern SemaphoreHandle_t sem_cal_to_meas;
 
 
 

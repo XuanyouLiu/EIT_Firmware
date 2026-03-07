@@ -151,48 +151,16 @@ int test_dsp(bool clipped, float clip_percent) {
 }
 
 void test_function(void) {
-        set_mux(1, 2, 3, 4);
+    set_mux(1, 2, 3, 4);
 
     // test_signal_gen();
     // test_inamp_pots();
-    set_src_inamp_gain(80);
-    set_sense_inamp_gain(100);
+    set_src_inamp_gain(60);
+    set_sense_inamp_gain(5);
     // test_mux();
 
-
-
     test_adc();
-    
-
-    while (1) {
-        uint16_t mag = test_peak_to_peak();
-        printf("mag: %d\n", mag);
-        vTaskDelay(pdMS_TO_TICKS(100));
-
-    }
-
 }
-
-uint16_t test_peak_to_peak() {
-    uint16_t buf[64];
-
-    if (adcRead(buf, 64) != 0) {
-        ESP_LOGE(TAG, "test_adc failed");   
-        return -1;
-    }
-
-
-    // for (int i = 0; i < 200; i++) {
-    //     ESP_LOGI(TAG, "buf[%d] = %d", i, buf[i]);
-    // }
-
-
-    return test_std_dev_mag((int16_t *)buf, 64, 1);
-
-
-}
-
-
 
 uint16_t test_std_dev_mag_test(int16_t* buf, uint16_t buf_len, float std_multiplier) {
     if (buf_len == 0) return 0;

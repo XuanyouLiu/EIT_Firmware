@@ -7,11 +7,9 @@
 #define ADC_READINGS_PER_PACKET 64
 
 void measurement_task(void* args);
+uint16_t calc_peak_to_peak(void);
 
-/* Tasks and primitive handles */
-extern TaskHandle_t cal_task;
 extern TaskHandle_t meas_task;
-extern SemaphoreHandle_t sem_cal_to_meas;
 
 /* Array of buffers holding chunks of ADC readings */
 extern uint16_t adc_packet_buffers[MAX_ADC_PACKETS][ADC_READINGS_PER_PACKET];
