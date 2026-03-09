@@ -10,7 +10,6 @@
 #include "../Device_Drivers/AD5930_SigGen.h"
 #include "../Device_Drivers/ADG73_MUX.h"
 #include "../Device_Drivers/AD7450_ADC.h"
-#include "esp_dsp.h"
 #include <math.h>
 
 
@@ -136,105 +135,6 @@ int adcRead(uint16_t *buf, size_t len) {
     return ESP_OK;
 }
 
-static int16_t w[64];
-uint32_t dsp_freq_amp(int16_t *buf, size_t len, uint8_t begin, uint8_t end) {
-    return 0;
-    #if DEBUG
-    ESP_LOGI(TAG, "dsp_freq_amp called with buffer length=%zu, begin=%u, end=%u", len, begin, end);
-    #endif
-    /* Add in the imagninary component and apply Hanning window */
-    int16_t real_and_imagine[128] = {0};
-
-    for (int i = 0; i < len; i++) {
-        float window = 0.5f - 0.5f * cosf(2.0f * M_PI * i / (len - 1));
-        real_and_imagine[2*i] = (int16_t)(buf[i] * window);
-        real_and_imagine[2*i+1] = 0;
-    }
-    
-    /* Initialize the FFT sine/cos tables once */
-    static bool fft_initialized = false;
-    if (!fft_initialized) {
-        if (dsps_fft2r_init_sc16(w, 64) != ESP_OK) {
-            #if DEBUG
-            ESP_LOGE(TAG, "Failed to init sine/cos tables");
-            #endif
-            return 0;
-        }
-        fft_initialized = true;
-    }
-    #if DEBUG
-    ESP_LOGI(TAG, "FFT sine/cos tables initialized");
-    #endif
-
-    /* Run the actual FFT */
-    
-    if ( dsps_fft2r_sc16_ansi_(real_and_imagine, len, w) != ESP_OK ) {
-        #if DEBUG
-        ESP_LOGE(TAG, "Failed to run FFT");
-        #endif
-        return 0;
-    }
-    #if DEBUG
-    ESP_LOGI(TAG, "FFT computation completed");
-    #endif
-
-    if ( dsps_bit_rev_sc16_ansi(real_and_imagine, len) != ESP_OK ) {
-         #if DEBUG
-         ESP_LOGE(TAG, "Failed to reverse FFT");
-         #endif
-        return 0;
-    }
-    #if DEBUG
-    ESP_LOGI(TAG, "Bit reversal completed");
-    #endif
-
-    uint32_t accumulated_mag = 0;
-    uint32_t max_mag = 0;
-    uint32_t high_freq_sum = 0;
-
-    for (size_t k = 0; k < len / 2; k++) {
-        int32_t re = real_and_imagine[2 * k];
-        int32_t im = real_and_imagine[2 * k + 1];
-
-        uint32_t mag = (uint32_t)sqrtf((float)(re * re + im * im));
-        
-        if (k >= begin && k <= end) {
-            accumulated_mag += mag;
-        }
-
-        if (mag > max_mag) {
-            max_mag = mag;
-        }
-
-        if (k >= 12) {
-            high_freq_sum += mag;
-        }
-
-       // //printf("bin[%zu] magnitude = %lu\n", k, mag);
-    }
-
-    //printf("Sum of bins 12-31: %lu\n", high_freq_sum);
-
-    // if (mag7 > 0) {
-    //     //printf("Ratio Bin 6/7: %f\n", (float)mag6 / mag7);
-    //     //printf("Ratio Bin 8/7: %f\n", (float)mag8 / mag7);
-    // }
-    // if (mag6 > 0) {
-    //      //printf("Ratio Bin 8/6: %f\n", (float)mag8 / mag6);
-    // }
-
-    #if DEBUG
-    ESP_LOGI(TAG, "DSP frequency amplitude calculation finished");
-    #endif
-
-    //printf("Max magnitude: %lu at bin 7\n", max_mag);
-    return accumulated_mag;
-}
-
-
-
-
-
 uint16_t calc_std_dev_mag(int16_t* buf, uint16_t buf_len, float multiplier) {
     if (buf_len == 0) return 0;
 
@@ -318,9 +218,10 @@ int adc_init(void) {
 
 
 bool detect_opamp_clipping(int16_t *buf, size_t len, uint32_t threshold, uint8_t begin, uint8_t end) {
-    uint32_t accumulated_mag = dsp_freq_amp(buf, len, begin, end);
-    if (accumulated_mag > threshold) {
-        return true;
-    }
+    (void)buf;
+    (void)len;
+    (void)threshold;
+    (void)begin;
+    (void)end;
     return false;
 }

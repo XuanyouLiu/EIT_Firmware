@@ -9,6 +9,7 @@ Uses standard protocol: 8 electrodes × 5 measurements = 40 channels.
 import sys, time
 import numpy as np
 import serial
+from serial.tools import list_ports
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
@@ -18,7 +19,7 @@ from pyeit.eit.jac import JAC
 from pyeit.eit.interp2d import sim2pts
 
 # ---------------- Serial configuration ---------------- #
-PORT = "/dev/cu.usbmodem2101"   # modify if your port changes
+PORT = "/dev/cu.usbmodem*"   # wildcard: connects to any matching usbmodem port
 BAUD = 115200
 TIMEOUT = 1
 
@@ -52,9 +53,22 @@ JAC_P, JAC_LAMB = 0.5, 0.3
 # ------------------------------------------------------------
 def open_serial():
     """Open Teensy serial port."""
-    print(f"Opening serial port {PORT} @ {BAUD} baud ...")
+    selected_port = PORT
+    if "*" in PORT:
+        prefix = PORT.split("*", 1)[0]
+        matches = sorted(
+            p.device for p in list_ports.comports()
+            if p.device.startswith(prefix)
+        )
+        if not matches:
+            print(f"No serial port matched pattern: {PORT}")
+            print("Available ports:", ", ".join(p.device for p in list_ports.comports()) or "none")
+            sys.exit(1)
+        selected_port = matches[0]
+
+    print(f"Opening serial port {selected_port} @ {BAUD} baud ...")
     try:
-        ser = serial.Serial(PORT, BAUD, timeout=TIMEOUT)
+        ser = serial.Serial(selected_port, BAUD, timeout=TIMEOUT)
         time.sleep(2)
         ser.reset_input_buffer()
         print("Serial ready.\nPress 0 to capture V0, press 1 to stream V1.")

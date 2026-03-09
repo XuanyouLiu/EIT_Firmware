@@ -8,7 +8,6 @@
 
 #include <math.h>
 
-#define TARGET_BUCKET 7
 #define ADC_STREAM_ACTIVE_MS 400
 #define ADC_STREAM_BREAK_MS 1000
 
@@ -135,16 +134,27 @@ int test_dsp(bool clipped, float clip_percent) {
     ESP_LOGI(TAG, "test_dsp: clipped=%d, clip_percent=%0.2f", clipped, clip_percent);
     #endif
     
-    //generate_sine_int16(samples, test_freq);
     generate_sine_int16_multi_random_amp_clipped(samples, test_freq, 3.0f, 5.0f, clipped, clip_percent);
     
-    uint16_t amplitude = (uint16_t)dsp_freq_amp(samples, TEST_GEN_N, TARGET_BUCKET, TARGET_BUCKET);
-    ESP_LOGI(TAG, "test_dsp: Generated %0.1f Hz, Amplitude: %u", test_freq, amplitude);
-    
+    // Time-domain amplitude estimate using mean absolute deviation
+    uint16_t amplitude = test_std_dev_mag_test(samples, TEST_GEN_N, 1.0f);
+    ESP_LOGI(TAG, "test_dsp: Generated %0.1f Hz, time-domain amplitude: %u", test_freq, amplitude);
 
-    bool clip_detected = detect_opamp_clipping(samples, TEST_GEN_N, 100, 10, 31);
+    // Simple clipping heuristic: count samples near int16 rails
+    const int16_t clip_threshold = 30000;
+    int clipped_samples = 0;
+    for (int i = 0; i < TEST_GEN_N; i++) {
+        if (samples[i] >= clip_threshold || samples[i] <= -clip_threshold) {
+            clipped_samples++;
+        }
+    }
 
-    ESP_LOGI(TAG, "test_dsp: clip_detected=%d, clipped=%d, clip_percent=%0.2f", clip_detected, clipped, clip_percent);
+    float clipped_ratio = (float)clipped_samples / (float)TEST_GEN_N;
+    bool clip_detected = (clipped_ratio > 0.01f);
+
+    ESP_LOGI(TAG,
+             "test_dsp: clip_detected=%d (clipped_ratio=%0.3f), clipped=%d, clip_percent=%0.2f",
+             clip_detected, clipped_ratio, clipped, clip_percent);
 
 
     return 0;

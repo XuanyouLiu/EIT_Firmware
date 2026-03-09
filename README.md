@@ -21,9 +21,9 @@ EIT_Firmware/
 │   ├── calibration.c       # System calibration routines
 │   └── measurement.c       # Impedance measurement sequences
 ├── Middle_Ware/            # Hardware Abstraction & Processing
-│   ├── hardware.c          # HAL, DSP processing (FFT, Windowing)
-│   ├── hardware-test.c     # Hardware verification suite
-│   └── test_data_gen.c     # Synthetic data generation for DSP testing
+│   ├── hardware.c          # HAL, signal routing, basic statistics
+│   ├── hardware-test.c     # Hardware verification and signal integrity tests
+│   └── test_data_gen.c     # Synthetic data generation for test signals
 ├── Device_Drivers/         # Low-level Component Drivers
 │   ├── AD5270_DigiPot.c    # AD5270 Driver
 │   ├── AD5930_SigGen.c     # AD5930 Driver
@@ -36,21 +36,17 @@ EIT_Firmware/
 
 ## Features
 
-*   **Signal Processing:** Uses `esp-dsp` for FFT-based frequency and amplitude extraction.
-    *   Includes Hanning windowing to reduce spectral leakage.
-    *   Supports 500kHz sampling rate processing.
+*   **Signal Metrics:** Uses lightweight time-domain statistics (e.g., mean absolute deviation) for amplitude estimation without FFT.
 *   **Automated Testing:** Built-in hardware test suite (`hardware-test.c`) to verify:
     *   ADC communication.
     *   Signal Generator output.
-    *   Multiplexer switching.
-    *   DSP logic (using synthetic signals with random phase).
+        *   Multiplexer switching.
+        *   Basic signal integrity and clipping detection using synthetic signals.
 *   **Calibration:** Routines to calibrate input/output gain stages.
 
 ## Dependencies
 
-This project relies on the **ESP-IDF** framework (v5.2+) and the following managed component:
-
-*   `espressif/esp-dsp`: For FFT and math operations.
+This project relies on the **ESP-IDF** framework (v5.2+).
 
 ## Build and Flash
 
@@ -71,6 +67,6 @@ This project relies on the **ESP-IDF** framework (v5.2+) and the following manag
 
 ## Testing
 
-The firmware includes a hardware test mode. To run the tests, ensure `run_hardware_test()` is called in `app_main` (currently enabled by default).
+The firmware includes a hardware test mode. To run the tests, ensure the appropriate test entry point (for example, functions in `hardware-test.c`) is invoked from `app_main`.
 
-The DSP test generates synthetic sine waves (mixed frequencies) to verify the FFT implementation without requiring external hardware input.
+The signal test path generates synthetic sine waves to validate ADC, mux, and gain path behavior using time-domain checks, without any FFT processing.
