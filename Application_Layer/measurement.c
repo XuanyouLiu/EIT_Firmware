@@ -19,14 +19,15 @@ static const char *TAG = "MEASUREMENT";
 uint16_t adc_packet_buffers[MAX_ADC_PACKETS][ADC_READINGS_PER_PACKET] = {0};
 
 uint16_t calc_peak_to_peak(void) {
-    uint16_t buf[512];
+    uint16_t buf[64];
 
-    if (adcRead(buf, 512) != 0) {
+    if (adcRead(buf, 64) != 0) {
         ESP_LOGE(TAG, "Failed to read ADC samples");
         return 0;
     }
+    
 
-    return calc_std_dev_mag((int16_t *)buf, 512, 1);
+    return calc_std_dev_mag((int16_t *)buf, 64, 1);
 }
 
 void measurement_task(void* args) {
@@ -55,7 +56,7 @@ void measurement_task(void* args) {
                     continue;
                 }
 
-                esp_rom_delay_us(300);
+                esp_rom_delay_us(200);
 
                 uint16_t amplitude = calc_peak_to_peak();
 
@@ -85,7 +86,6 @@ void measurement_task(void* args) {
         prev_us = timestamp_us;
         printf("delta_us: %" PRIu32 "\n", delta_us);
 #else
-        // vTaskDelay(pdMS_TO_TICKS(100));
 #endif
 
         #if DEBUG

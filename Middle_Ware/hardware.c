@@ -130,6 +130,9 @@ int adcRead(uint16_t *buf, size_t len) {
             ESP_LOGI(TAG, "AD7450 read failed");
             return -1;
         }
+
+
+        
     #endif
 
     return ESP_OK;

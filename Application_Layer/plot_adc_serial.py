@@ -127,7 +127,11 @@ def main() -> None:
             
             # Keep the view focused on the sliding window
             if plot_x:
-                ax.set_xlim(plot_x[0], plot_x[-1])
+                if len(plot_x) > 1 and plot_x[0] != plot_x[-1]:
+                    ax.set_xlim(plot_x[0], plot_x[-1])
+                else:
+                    center = plot_x[0]
+                    ax.set_xlim(center - 1, center + 1)
 
             plt.pause(0.001)
 
