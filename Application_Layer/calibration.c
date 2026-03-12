@@ -6,8 +6,8 @@
 
 static const char *TAG = "CALIBRATION";
 
-const uint16_t SCR_RDATA_CONST = 70; //Fixed source gain value
-const uint16_t SNS_RDATA_CONST = 15; //Fixed sense gain value
+const uint16_t SCR_RDATA_CONST = 300; //Fixed source gain value
+const uint16_t SNS_RDATA_CONST = 60; //Fixed sense gain value
 
 #define TOTAL_TARE_MEASUREMENTS (NUM_ELECTRODE_PAIRS * NUM_SENSE_PAIRS)
 #define TARE_PRINT_COUNT 40
@@ -16,7 +16,7 @@ const uint16_t SNS_RDATA_CONST = 15; //Fixed sense gain value
 
 
 
-#define ADJACENT_40
+#define STAR_40
 
 #ifdef ADJACENT_40
 Calibration_t pair_calibration_map[NUM_ELECTRODE_PAIRS][NUM_SENSE_PAIRS] = {

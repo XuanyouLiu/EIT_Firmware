@@ -1,5 +1,6 @@
 #include <inttypes.h>
 #include <stdio.h>
+#include <math.h>
 
 #include "measurement.h"
 #include "calibration.h"
@@ -12,22 +13,41 @@
 
 static const char *TAG = "MEASUREMENT";
 
-#define AMP_FILTER_ALPHA 0.5f
+#define TOTAL_MEASUREMENTS (NUM_ELECTRODE_PAIRS * NUM_SENSE_PAIRS)
+
+/** Alpha for per-channel EWMA smoothing (0..1). Smaller = smoother. */
+#define AMP_FILTER_ALPHA  0.8f
 
 // #define PROFILE_SAMPLE_RATE
 
 uint16_t adc_packet_buffers[MAX_ADC_PACKETS][ADC_READINGS_PER_PACKET] = {0};
 
-uint16_t calc_peak_to_peak(void) {
-    uint16_t buf[64];
 
-    if (adcRead(buf, 64) != 0) {
+/* -----------------------------------------------------------------------
+ * FIR bandpass filter (Hamming window) was used here previously, but is
+ * now disabled. The code below has been intentionally commented out to
+ * simplify the signal path.
+ *
+ * // #define FIR_NUM_TAPS  21
+ * // #define ADC_BUF_LEN   64
+ * // #define FIR_OUT_LEN   (ADC_BUF_LEN - FIR_NUM_TAPS + 1)
+ * //
+ * // static const float fir_coeffs[FIR_NUM_TAPS] = { ... };
+ * //
+ * // static void fir_filter(const int16_t *in, float *out) { ... }
+ * ----------------------------------------------------------------------- */
+#define ADC_BUF_LEN   64
+
+uint16_t calc_peak_to_peak(void) {
+    uint16_t raw[ADC_BUF_LEN];
+
+    if (adcRead(raw, ADC_BUF_LEN) != 0) {
         ESP_LOGE(TAG, "Failed to read ADC samples");
         return 0;
     }
-    
 
-    return calc_std_dev_mag((int16_t *)buf, 64, 1);
+    /* FIR path disabled: compute amplitude directly from raw samples. */
+    return calc_std_dev_mag((int16_t *)raw, ADC_BUF_LEN, 1);
 }
 
 void measurement_task(void* args) {
@@ -35,7 +55,6 @@ void measurement_task(void* args) {
 
     ESP_LOGI(TAG, "Measurement task starting");
 
-    uint16_t amps[NUM_ELECTRODE_PAIRS * NUM_SENSE_PAIRS] = {0};
 #ifdef PROFILE_SAMPLE_RATE
     uint32_t prev_us = 0;
 #endif
@@ -56,36 +75,36 @@ void measurement_task(void* args) {
                     continue;
                 }
 
-                esp_rom_delay_us(200);
+                esp_rom_delay_us(50);
+        // vTaskDelay(pdMS_TO_TICKS(700));
 
                 uint16_t amplitude = calc_peak_to_peak();
 
-                if (idx < total_measurements) {
-                    float previous = (float)amps[idx];
-                    float filtered = (1.0f - AMP_FILTER_ALPHA) * previous +
-                                     AMP_FILTER_ALPHA * (float)amplitude;
-                    uint16_t filtered_u16 = (uint16_t)filtered;
-                    amps[idx] = amplitude;
-                    curr_config->ewma_amp = filtered_u16;
-                    idx++;
-                }
+                float prev = (float)curr_config->ewma_amp;
+                float smoothed = (1.0f - AMP_FILTER_ALPHA) * prev + AMP_FILTER_ALPHA * (float)amplitude;
+                curr_config->ewma_amp = (uint16_t)smoothed;
+
+                idx++;
 
             }
 
         }
 
         for (uint8_t i = 0; i < total_measurements; i++) {
-            printf("%u ", amps[i]);
+            Calibration_t* cfg = &pair_calibration_map[i / NUM_SENSE_PAIRS][i % NUM_SENSE_PAIRS];
+            printf("%u ", (unsigned)cfg->ewma_amp);
         }
         printf("\n");
-
 
 #ifdef PROFILE_SAMPLE_RATE
         uint32_t timestamp_us = (uint32_t)esp_timer_get_time();
         uint32_t delta_us = (prev_us > 0) ? (timestamp_us - prev_us) : 0;
         prev_us = timestamp_us;
-        printf("delta_us: %" PRIu32 "\n", delta_us);
+        float freq_hz = (delta_us > 0) ? (1000000.0f / (float)delta_us) : 0.0f;
+        printf("delta_us: %" PRIu32 ", freq: %.2f Hz\n", delta_us, freq_hz);
 #else
+        // vTaskDelay(pdMS_TO_TICKS(90));
+
 #endif
 
         #if DEBUG

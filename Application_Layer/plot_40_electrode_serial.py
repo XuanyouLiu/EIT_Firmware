@@ -1,20 +1,29 @@
 #!/usr/bin/env python3
-"""Live plot of 40 EIT electrode measurements from serial output."""
+"""Live line-over-time plot of 40 EIT electrode channels — one subplot each."""
 
 import argparse
+import queue
 import sys
+import threading
 import time
 from typing import Optional
 
+import matplotlib
+matplotlib.use("MacOSX")          # fastest native backend on macOS
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+import numpy as np
 import serial
 from serial import SerialException
 from serial.tools import list_ports
 
 NUM_CHANNELS = 40
+HISTORY_LEN = 100          # samples retained per channel (shorter = faster render)
+SUBPLOT_ROWS = 8
+SUBPLOT_COLS = 5           # 8 × 5 = 40 subplots
 DEFAULT_BAUD = 115200
 DEFAULT_TIMEOUT = 1.0
+YLIM_UPDATE_EVERY = 10     # only rescale Y-axis every N rendered frames
 PREFERRED_PORT_PREFIXES = (
     "/dev/cu.usbmodem",
     "/dev/tty.usbmodem",
@@ -26,55 +35,80 @@ PREFERRED_PORT_PREFIXES = (
 def select_port(user_port: Optional[str]) -> str:
     if user_port:
         return user_port
-
-    ports = [port.device for port in list_ports.comports()]
+    ports = [p.device for p in list_ports.comports()]
     for prefix in PREFERRED_PORT_PREFIXES:
         for port in ports:
             if port.startswith(prefix):
                 return port
-
     if ports:
         return ports[0]
-
     raise RuntimeError("No serial ports found. Connect the device or pass --port explicitly.")
 
 
-def open_serial(port: str, baud: int, timeout: float) -> serial.Serial:
-    return serial.Serial(port, baud, timeout=timeout)
-
-
-def parse_frame(raw: str) -> Optional[list[int]]:
+def parse_frame(raw: str) -> Optional[list[float]]:
     text = raw.strip()
     if not text:
         return None
-
     upper = text.upper()
     if upper == "TARE" or upper.startswith("TARE "):
         return None
-
     parts = text.replace(",", " ").split()
     if len(parts) < NUM_CHANNELS:
         return None
-
     try:
-        values = [int(float(part)) for part in parts[:NUM_CHANNELS]]
+        return [float(p) for p in parts[:NUM_CHANNELS]]
     except ValueError:
         return None
 
-    return values
+
+def serial_reader(port: str, baud: int, timeout: float,
+                  data_queue: queue.SimpleQueue, stop_event: threading.Event) -> None:
+    """Background thread: open serial, push parsed frames onto data_queue."""
+    ser: Optional[serial.Serial] = None
+    while not stop_event.is_set():
+        if ser is None or not ser.is_open:
+            try:
+                ser = serial.Serial(port, baud, timeout=timeout)
+                time.sleep(2)
+                ser.reset_input_buffer()
+                data_queue.put(("status", f"Connected to {port} @ {baud}"))
+                print(f"Connected to {port} @ {baud}")
+            except SerialException as exc:
+                data_queue.put(("status", f"Waiting for device: {exc}"))
+                time.sleep(1)
+                continue
+
+        try:
+            raw = ser.readline().decode("utf-8", errors="ignore")
+        except SerialException as exc:
+            data_queue.put(("status", f"Disconnected: {exc}"))
+            print(f"Serial disconnected: {exc}")
+            try:
+                ser.close()
+            except SerialException:
+                pass
+            ser = None
+            continue
+
+        frame = parse_frame(raw)
+        if frame is not None:
+            data_queue.put(("frame", frame))
+
+    if ser is not None and ser.is_open:
+        ser.close()
+    print("Serial reader thread exited.")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Plot the latest 40 electrode values from ESP serial output"
+        description="Live time-series line plot for 40 EIT channels"
     )
-    parser.add_argument("--port", default=None, help="Serial port. Auto-detected when omitted.")
-    parser.add_argument("--baud", type=int, default=DEFAULT_BAUD, help="Serial baud rate")
+    parser.add_argument("--port", default=None, help="Serial port (auto-detected if omitted)")
+    parser.add_argument("--baud", type=int, default=DEFAULT_BAUD)
+    parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     parser.add_argument(
-        "--timeout",
-        type=float,
-        default=DEFAULT_TIMEOUT,
-        help="Serial read timeout in seconds",
+        "--history", type=int, default=HISTORY_LEN,
+        help="Number of samples to show per subplot",
     )
     args = parser.parse_args()
 
@@ -86,87 +120,119 @@ def main() -> None:
 
     print(f"Using serial port: {port}")
 
-    fig, ax = plt.subplots(figsize=(14, 6))
-    x_values = list(range(1, NUM_CHANNELS + 1))
-    y_values = [0] * NUM_CHANNELS
+    # numpy circular buffers — shape (NUM_CHANNELS, history)
+    H = args.history
+    buf = np.zeros((NUM_CHANNELS, H), dtype=np.float32)
+    write_pos = 0   # next write index (circular)
 
-    bars = ax.bar(x_values, y_values, color="#4c78a8", alpha=0.75)
-    line, = ax.plot(x_values, y_values, color="#f58518", marker="o", linewidth=2)
+    # Shared queue between serial thread and GUI
+    data_queue: queue.SimpleQueue = queue.SimpleQueue()
+    stop_event = threading.Event()
+    reader_thread = threading.Thread(
+        target=serial_reader,
+        args=(port, args.baud, args.timeout, data_queue, stop_event),
+        daemon=True,
+    )
 
-    ax.set_title("Live 40-Channel EIT Measurements")
-    ax.set_xlabel("Channel")
-    ax.set_ylabel("Value")
-    ax.set_xticks(x_values)
-    ax.set_xlim(0.25, NUM_CHANNELS + 0.75)
-    ax.grid(True, axis="y", linestyle=":", alpha=0.5)
+    # Build 8×5 grid of subplots
+    plt.style.use("fast")
+    fig, axes = plt.subplots(
+        SUBPLOT_ROWS, SUBPLOT_COLS,
+        figsize=(18, 20),
+        sharex=False,
+        sharey=False,
+    )
+    fig.suptitle("Live 40-Channel EIT — Value over Time", fontsize=14, y=1.002)
+    axes_flat = axes.flatten()
 
-    status_text = fig.text(0.01, 0.01, "Connecting...", ha="left", va="bottom")
+    # Pre-build x index array (reused every frame, no allocation)
+    x_idx = np.arange(H, dtype=np.float32)
 
-    serial_state = {"handle": None}
+    lines = []
+    for ch_idx, ax in enumerate(axes_flat):
+        (ln,) = ax.plot(x_idx, buf[ch_idx], linewidth=0.8, color="#4c78a8",
+                        antialiased=False)
+        ax.set_title(f"Ch {ch_idx + 1}", fontsize=7, pad=2)
+        ax.set_xlim(0, H - 1)
+        ax.set_ylim(0, 10)
+        ax.tick_params(labelsize=6)
+        ax.grid(True, linestyle=":", alpha=0.4)
+        ax.set_xticks([])
+        lines.append(ln)
 
-    def set_status(message: str) -> None:
-        status_text.set_text(message)
+    status_text = fig.text(0.01, 0.002, "Connecting...", ha="left", va="bottom", fontsize=8)
 
-    def ensure_serial() -> Optional[serial.Serial]:
-        if serial_state["handle"] is not None and serial_state["handle"].is_open:
-            return serial_state["handle"]
+    ylim_cache = [(0.0, 10.0)] * NUM_CHANNELS
+    frame_counter = [0]
 
+    def update(_f):
+        nonlocal write_pos
+
+        # Drain the queue — consume all pending frames, keep only the latest
+        latest_frame = None
+        new_status = None
         try:
-            serial_state["handle"] = open_serial(port, args.baud, args.timeout)
-            time.sleep(2)
-            serial_state["handle"].reset_input_buffer()
-            set_status(f"Connected to {port} @ {args.baud}")
-            print(f"Connected to {port} @ {args.baud}")
-            return serial_state["handle"]
-        except SerialException as exc:
-            set_status(f"Waiting for serial device: {exc}")
-            return None
+            while True:
+                kind, payload = data_queue.get_nowait()
+                if kind == "frame":
+                    latest_frame = payload
+                else:
+                    new_status = payload
+        except queue.Empty:
+            pass
 
-    def update(_frame_index: int):
-        ser = ensure_serial()
-        if ser is None:
-            time.sleep(0.5)
-            return (*bars, line)
+        if new_status is not None:
+            status_text.set_text(new_status)
 
-        try:
-            raw = ser.readline().decode("utf-8", errors="ignore")
-        except SerialException as exc:
-            set_status(f"Serial disconnected: {exc}")
-            print(f"Serial disconnected: {exc}")
-            try:
-                ser.close()
-            except SerialException:
-                pass
-            serial_state["handle"] = None
-            return (*bars, line)
+        if latest_frame is None:
+            return lines
 
-        frame_values = parse_frame(raw)
-        if frame_values is None:
-            return (*bars, line)
+        # Write new sample into circular buffer column
+        buf[:, write_pos] = latest_frame
+        write_pos = (write_pos + 1) % H
 
-        max_value = max(frame_values) if frame_values else 1
-        top = max(10, int(max_value * 1.15))
-        ax.set_ylim(0, top)
+        # Reconstruct time-ordered view without copying (roll via index)
+        ordered = np.concatenate(
+            (buf[:, write_pos:], buf[:, :write_pos]), axis=1
+        )  # shape (40, H)
 
-        for bar, value in zip(bars, frame_values):
-            bar.set_height(value)
+        for ch_idx in range(NUM_CHANNELS):
+            lines[ch_idx].set_ydata(ordered[ch_idx])
 
-        line.set_ydata(frame_values)
-        set_status(
-            f"Latest frame received | min={min(frame_values)} max={max(frame_values)} mean={sum(frame_values) / len(frame_values):.1f}"
+        # Rescale Y only every YLIM_UPDATE_EVERY frames to avoid axis overhead
+        frame_counter[0] += 1
+        if frame_counter[0] % YLIM_UPDATE_EVERY == 0:
+            for ch_idx in range(NUM_CHANNELS):
+                lo = float(ordered[ch_idx].min())
+                hi = float(ordered[ch_idx].max())
+                pad = max(1.0, (hi - lo) * 0.1)
+                new_lim = (lo - pad, hi + pad)
+                if new_lim != ylim_cache[ch_idx]:
+                    axes_flat[ch_idx].set_ylim(new_lim)
+                    ylim_cache[ch_idx] = new_lim
+
+        status_text.set_text(
+            f"Frame | min={min(latest_frame):.0f}  max={max(latest_frame):.0f}"
+            f"  mean={sum(latest_frame)/len(latest_frame):.1f}"
         )
-        return (*bars, line)
+        return lines
 
-    animation = FuncAnimation(fig, update, interval=50, blit=False, cache_frame_data=False)
-    _ = animation
+    reader_thread.start()
+
+    ani = FuncAnimation(fig, update, interval=30, blit=False, cache_frame_data=False)
+    _ = ani
 
     try:
-        plt.tight_layout(rect=(0, 0.04, 1, 1))
+        plt.tight_layout()
         plt.show()
     finally:
-        if serial_state["handle"] is not None and serial_state["handle"].is_open:
-            serial_state["handle"].close()
-            print("Serial closed.")
+        stop_event.set()
+        reader_thread.join(timeout=3)
+        print("Done.")
+
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":
