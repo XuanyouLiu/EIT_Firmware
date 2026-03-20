@@ -58,6 +58,7 @@ static void wait_for_serial_command(char command_lower,
 void app_main(void)
 {
     ESP_LOGI(TAG, "app_main start");
+    ESP_LOGI(TAG, "Firmware build: %s %s", __DATE__, __TIME__);
 
     esp_task_wdt_deinit();
     init_serial_command_input();

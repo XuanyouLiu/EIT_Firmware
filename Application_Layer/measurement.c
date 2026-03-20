@@ -15,8 +15,8 @@ static const char *TAG = "MEASUREMENT";
 
 #define TOTAL_MEASUREMENTS (NUM_ELECTRODE_PAIRS * NUM_SENSE_PAIRS)
 
-/** Alpha for per-channel EWMA smoothing (0..1). Smaller = smoother. */
-#define AMP_FILTER_ALPHA  0.8f
+/** Alpha for per-channel EWMA smoothing (0..1). 1.0 ~= near bypass. */
+#define AMP_FILTER_ALPHA  1.0f
 
 // #define PROFILE_SAMPLE_RATE
 
@@ -38,7 +38,7 @@ uint16_t adc_packet_buffers[MAX_ADC_PACKETS][ADC_READINGS_PER_PACKET] = {0};
  * ----------------------------------------------------------------------- */
 #define ADC_BUF_LEN   64
 
-uint16_t calc_peak_to_peak(void) {
+static uint16_t calc_peak_to_peak_with_stats(uint16_t *out_min, uint16_t *out_max, uint16_t *out_mean) {
     uint16_t raw[ADC_BUF_LEN];
 
     if (adcRead(raw, ADC_BUF_LEN) != 0) {
@@ -46,8 +46,27 @@ uint16_t calc_peak_to_peak(void) {
         return 0;
     }
 
+    if (out_min != NULL && out_max != NULL && out_mean != NULL) {
+        uint16_t min_v = raw[0];
+        uint16_t max_v = raw[0];
+        uint32_t sum_v = 0;
+        for (uint16_t i = 0; i < ADC_BUF_LEN; i++) {
+            uint16_t v = raw[i];
+            if (v < min_v) min_v = v;
+            if (v > max_v) max_v = v;
+            sum_v += v;
+        }
+        *out_min = min_v;
+        *out_max = max_v;
+        *out_mean = (uint16_t)(sum_v / ADC_BUF_LEN);
+    }
+
     /* FIR path disabled: compute amplitude directly from raw samples. */
     return calc_std_dev_mag((int16_t *)raw, ADC_BUF_LEN, 1);
+}
+
+uint16_t calc_peak_to_peak(void) {
+    return calc_peak_to_peak_with_stats(NULL, NULL, NULL);
 }
 
 void measurement_task(void* args) {
@@ -63,8 +82,6 @@ void measurement_task(void* args) {
     set_sense_inamp_gain(SNS_RDATA_CONST);
 
     while (1) {
-        int idx = 0;
-
         for (uint8_t src_elec_pair = 0; src_elec_pair < NUM_ELECTRODE_PAIRS; src_elec_pair++) {
             for (uint8_t sense_elec_pair = 0; sense_elec_pair < NUM_SENSE_PAIRS; sense_elec_pair++) {
                 Calibration_t* curr_config = &pair_calibration_map[src_elec_pair][sense_elec_pair];
@@ -78,14 +95,11 @@ void measurement_task(void* args) {
                 esp_rom_delay_us(50);
         // vTaskDelay(pdMS_TO_TICKS(700));
 
-                uint16_t amplitude = calc_peak_to_peak();
-
+                uint16_t amplitude = 0;
+                amplitude = calc_peak_to_peak();
                 float prev = (float)curr_config->ewma_amp;
                 float smoothed = (1.0f - AMP_FILTER_ALPHA) * prev + AMP_FILTER_ALPHA * (float)amplitude;
                 curr_config->ewma_amp = (uint16_t)smoothed;
-
-                idx++;
-
             }
 
         }
@@ -102,9 +116,6 @@ void measurement_task(void* args) {
         prev_us = timestamp_us;
         float freq_hz = (delta_us > 0) ? (1000000.0f / (float)delta_us) : 0.0f;
         printf("delta_us: %" PRIu32 ", freq: %.2f Hz\n", delta_us, freq_hz);
-#else
-        // vTaskDelay(pdMS_TO_TICKS(90));
-
 #endif
 
         #if DEBUG

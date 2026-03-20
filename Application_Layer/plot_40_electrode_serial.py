@@ -24,6 +24,9 @@ SUBPLOT_COLS = 5           # 8 × 5 = 40 subplots
 DEFAULT_BAUD = 115200
 DEFAULT_TIMEOUT = 1.0
 YLIM_UPDATE_EVERY = 10     # only rescale Y-axis every N rendered frames
+YLIM_SMOOTH_ALPHA = 0.25   # 0..1, larger = faster y-limit response
+YLIM_MIN_SPAN = 0.1        # tighter zoom for low-level signals
+YLIM_LOWER_BOUND = 0.0     # amplitudes are non-negative in this stream
 PREFERRED_PORT_PREFIXES = (
     "/dev/cu.usbmodem",
     "/dev/tty.usbmodem",
@@ -109,6 +112,14 @@ def main() -> None:
     parser.add_argument(
         "--history", type=int, default=HISTORY_LEN,
         help="Number of samples to show per subplot",
+    )
+    parser.add_argument(
+        "--ylim-update-every", type=int, default=YLIM_UPDATE_EVERY,
+        help="Recompute y-limits every N rendered frames",
+    )
+    parser.add_argument(
+        "--no-auto-ylim", action="store_true",
+        help="Disable automatic y-axis scaling",
     )
     args = parser.parse_args()
 
@@ -199,17 +210,36 @@ def main() -> None:
         for ch_idx in range(NUM_CHANNELS):
             lines[ch_idx].set_ydata(ordered[ch_idx])
 
-        # Rescale Y only every YLIM_UPDATE_EVERY frames to avoid axis overhead
+        # Rescale Y periodically to reduce axis update overhead.
+        # Use smoothing so the range changes feel stable, not jumpy.
         frame_counter[0] += 1
-        if frame_counter[0] % YLIM_UPDATE_EVERY == 0:
+        if (not args.no_auto_ylim) and (frame_counter[0] % args.ylim_update_every == 0):
             for ch_idx in range(NUM_CHANNELS):
                 lo = float(ordered[ch_idx].min())
                 hi = float(ordered[ch_idx].max())
-                pad = max(1.0, (hi - lo) * 0.1)
-                new_lim = (lo - pad, hi + pad)
-                if new_lim != ylim_cache[ch_idx]:
-                    axes_flat[ch_idx].set_ylim(new_lim)
-                    ylim_cache[ch_idx] = new_lim
+                span = hi - lo
+                if span < YLIM_MIN_SPAN:
+                    mid = 0.5 * (hi + lo)
+                    lo = mid - 0.5 * YLIM_MIN_SPAN
+                    hi = mid + 0.5 * YLIM_MIN_SPAN
+                    span = YLIM_MIN_SPAN
+
+                pad = max(0.01, span * 0.08)
+                target_lo = lo - pad
+                target_hi = hi + pad
+                if target_lo < YLIM_LOWER_BOUND:
+                    target_lo = YLIM_LOWER_BOUND
+                if target_hi <= target_lo:
+                    target_hi = target_lo + YLIM_MIN_SPAN
+
+                cur_lo, cur_hi = ylim_cache[ch_idx]
+                new_lo = cur_lo + YLIM_SMOOTH_ALPHA * (target_lo - cur_lo)
+                new_hi = cur_hi + YLIM_SMOOTH_ALPHA * (target_hi - cur_hi)
+
+                # Avoid tiny limit churn that still costs redraw time.
+                if abs(new_lo - cur_lo) > 0.05 or abs(new_hi - cur_hi) > 0.05:
+                    axes_flat[ch_idx].set_ylim(new_lo, new_hi)
+                    ylim_cache[ch_idx] = (new_lo, new_hi)
 
         status_text.set_text(
             f"Frame | min={min(latest_frame):.0f}  max={max(latest_frame):.0f}"
@@ -229,10 +259,6 @@ def main() -> None:
         stop_event.set()
         reader_thread.join(timeout=3)
         print("Done.")
-
-
-if __name__ == "__main__":
-    main()
 
 
 if __name__ == "__main__":

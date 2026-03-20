@@ -8,7 +8,9 @@
 #include "freertos/FreeRTOS.h"
 #include "soc/spi_struct.h"  // For spi_dev_t and GPSPI2
 
-#define USE_DIRECT_REGISTERS
+// Use the SPI driver path for stability across resets/reflashes.
+// The direct-register fast path is kept below for reference/debugging.
+// #define USE_DIRECT_REGISTERS
 
 // #define PROFILE_SAMPLE_RATE
 
